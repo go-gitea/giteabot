@@ -12,6 +12,12 @@ export const run = async () => {
   const twoWeeksAgo = new Date(Date.now() - MILLISECONDS_IN_A_DAY * 14);
   const threeMonthsAgo = new Date(Date.now() - MILLISECONDS_IN_A_DAY * 90);
   const issues = await fetchClosedOldIssuesAndPRs(threeMonthsAgo);
+  if (!issues?.items?.length) {
+    if (!issues?.items) {
+      console.warn("Failed to fetch issues for locking.");
+    }
+    return [];
+  }
   return Promise.all(
     issues.items.map(
       async (

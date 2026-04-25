@@ -1,3 +1,4 @@
+import { TARGET_REPO_HTTP } from "./config.ts";
 import {
   addComment,
   addLabels,
@@ -44,7 +45,7 @@ const handlePr = async (pr: {
     console.log(`Closing PR #${pr.number} due to pr/last-call timeout`);
     await addComment(
       pr.number,
-      "This pull request has a last call and has not had any activity in the past two weeks. Consider it to be a [polite refusal](https://github.com/go-gitea/gitea/blob/main/CONTRIBUTING.md#final-call). :tea:",
+      `This pull request has a last call and has not had any activity in the past two weeks. Consider it to be a [polite refusal](${TARGET_REPO_HTTP}/blob/main/CONTRIBUTING.md#final-call). :tea:`,
     );
 
     // close PR

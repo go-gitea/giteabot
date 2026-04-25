@@ -1,4 +1,5 @@
 import * as cmd from "./cmd.ts";
+import { TARGET_REPO_GIT } from "./config.ts";
 
 export const getPrBranchName = (
   prNumber: number,
@@ -23,7 +24,7 @@ export const initializeGitRepo = async (user: string, email: string | null) => {
       "remote",
       "add",
       "upstream",
-      "https://github.com/go-gitea/gitea.git",
+      TARGET_REPO_GIT,
     ],
   });
 

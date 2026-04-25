@@ -3,6 +3,7 @@ import { getPrBranchName } from "./git.ts";
 import { GiteaVersion } from "./giteaVersion.ts";
 import { backportPrExistsCache } from "./state.ts";
 import { PullRequest } from "./types.ts";
+import { TARGET_REPO } from "./config.ts";
 
 const GITHUB_API = "https://api.github.com";
 const HEADERS = {
@@ -21,7 +22,7 @@ export const fetchCandidates = async (giteaMajorMinorVersion: string) => {
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr is:merged base:main label:backport/v${giteaMajorMinorVersion} -label:backport/done -label:backport/manual repo:go-gitea/gitea`,
+        `is:pr is:merged base:main label:backport/v${giteaMajorMinorVersion} -label:backport/done -label:backport/manual repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -34,7 +35,7 @@ export const fetchMergedWithLabel = async (label: string) => {
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr is:merged label:${label} repo:go-gitea/gitea`,
+        `is:pr is:merged label:${label} repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -51,7 +52,7 @@ export const fetchOpenIssuesWithLabel = async (label: string) => {
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:issue is:open label:${label} repo:go-gitea/gitea`,
+        `is:issue is:open label:${label} repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -64,7 +65,7 @@ export const fetchOpenPrsWithLabel = async (label: string) => {
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr is:open label:${label} repo:go-gitea/gitea`,
+        `is:pr is:open label:${label} repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -77,7 +78,7 @@ export const fetchPendingMerge = async () => {
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr is:open label:reviewed/wait-merge sort:created-asc repo:go-gitea/gitea`,
+        `is:pr is:open label:reviewed/wait-merge sort:created-asc repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -92,7 +93,7 @@ export const fetchTargeting = async (
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr base:${branch} repo:go-gitea/gitea`,
+        `is:pr base:${branch} repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -107,7 +108,7 @@ export const fetchUnmergedClosedWithMilestone = async (
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr is:closed is:unmerged milestone:${milestoneTitle} repo:go-gitea/gitea`,
+        `is:pr is:closed is:unmerged milestone:${milestoneTitle} repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -120,7 +121,7 @@ export const fetchBreakingWithoutLabel = async () => {
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr "## :warning: BREAKING" -label:pr/breaking repo:go-gitea/gitea`,
+        `is:pr "## :warning: BREAKING" -label:pr/breaking repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -134,7 +135,7 @@ export const fetchPrFileNames = async (prNumber: number) => {
   let page = 1;
   while (true) {
     const response = await fetch(
-      `${GITHUB_API}/repos/go-gitea/gitea/pulls/${prNumber}/files?per_page=100&page=${page}`,
+      `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}/files?per_page=100&page=${page}`,
       { headers: HEADERS },
     );
     const json = await response.json();
@@ -152,7 +153,7 @@ export const fetchPrFileNames = async (prNumber: number) => {
 export const updatePr = async (prNumber: number): Promise<Response> => {
   const pr = await fetchPr(prNumber);
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/pulls/${prNumber}/update-branch`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}/update-branch`,
     {
       method: "PUT",
       headers: HEADERS,
@@ -169,7 +170,7 @@ export const setCommitStatus = (
   description: string,
 ) => {
   return fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/statuses/${sha}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`,
     {
       method: "POST",
       headers: HEADERS,
@@ -182,10 +183,10 @@ export const setCommitStatus = (
   );
 };
 
-// get a go-gitea/gitea branch
+// get a target repo branch
 export const fetchBranch = async (branch: string) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/branches/${branch}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`,
     { headers: HEADERS },
   );
   return response.json();
@@ -212,7 +213,7 @@ export const removeLabel = async (
   label: string,
 ) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${prNumber}/labels/${label}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}/labels/${label}`,
     { method: "DELETE", headers: HEADERS },
   );
   return response;
@@ -221,7 +222,7 @@ export const removeLabel = async (
 // returns the PR
 export const fetchPr = async (prNumber: number) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/pulls/${prNumber}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`,
     { headers: HEADERS },
   );
   return response.json();
@@ -230,7 +231,7 @@ export const fetchPr = async (prNumber: number) => {
 // sets the milestone of the given PR
 export const setMilestone = (prNumber: number, milestone: number) => {
   return fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${prNumber}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}`,
     {
       method: "PATCH",
       headers: HEADERS,
@@ -241,7 +242,7 @@ export const setMilestone = (prNumber: number, milestone: number) => {
 
 // removes the milestone of the given PR
 export const removeMilestone = (prNumber: number) => {
-  return fetch(`${GITHUB_API}/repos/go-gitea/gitea/issues/${prNumber}`, {
+  return fetch(`${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}`, {
     method: "PATCH",
     headers: HEADERS,
     body: JSON.stringify({ milestone: null }),
@@ -262,7 +263,7 @@ export const backportPrExists = async (
   let response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:pr is:open repo:go-gitea/gitea base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`,
+        `is:pr is:open repo:${TARGET_REPO} base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`,
       ),
     { headers: HEADERS },
   );
@@ -291,7 +292,7 @@ type Milestone = { title: string; number: number };
 // get Gitea milestones
 export const getMilestones = async (): Promise<Milestone[]> => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/milestones`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/milestones`,
     { headers: HEADERS },
   );
   if (!response.ok) throw new Error(await response.text());
@@ -330,7 +331,7 @@ export const getPrReviewers = async (
   let page = 1;
   while (true) {
     const response = await fetch(
-      `${GITHUB_API}/repos/go-gitea/gitea/pulls/${pr.number}/reviews?per_page=100&page=${page}`,
+      `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${pr.number}/reviews?per_page=100&page=${page}`,
       { headers: HEADERS },
     );
     if (!response.ok) throw new Error(await response.text());
@@ -386,7 +387,7 @@ export const createBackportPr = async (
   if (originalPr.body) {
     prDescription += "\n\n" + originalPr.body;
   }
-  let response = await fetch(`${GITHUB_API}/repos/go-gitea/gitea/pulls`, {
+  let response = await fetch(`${GITHUB_API}/repos/${TARGET_REPO}/pulls`, {
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify({
@@ -419,7 +420,7 @@ export const createBackportPr = async (
 
   // add labels
   response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${json.number}/labels`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${json.number}/labels`,
     {
       method: "POST",
       headers: HEADERS,
@@ -429,7 +430,7 @@ export const createBackportPr = async (
 
   // set assignee
   await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${json.number}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${json.number}`,
     {
       method: "PATCH",
       headers: HEADERS,
@@ -442,7 +443,7 @@ export const createBackportPr = async (
   // request review from original PR approvers
   const { approvers } = await getPrReviewers(originalPr);
   await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/pulls/${json.number}/requested_reviewers`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${json.number}/requested_reviewers`,
     {
       method: "POST",
       headers: HEADERS,
@@ -461,7 +462,7 @@ export const createBackportPr = async (
 
 export const addLabels = async (prNumber: number, labels: string[]) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${prNumber}/labels`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}/labels`,
     {
       method: "POST",
       headers: HEADERS,
@@ -473,7 +474,7 @@ export const addLabels = async (prNumber: number, labels: string[]) => {
 
 export const addComment = async (issueNumber: number, comment: string) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${issueNumber}/comments`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}/comments`,
     {
       method: "POST",
       headers: HEADERS,
@@ -490,7 +491,7 @@ export const lockIssue = async (
   reason: "off-topic" | "too heated" | "resolved" | "spam",
 ) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${issueNumber}/lock`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}/lock`,
     {
       method: "PUT",
       headers: HEADERS,
@@ -514,7 +515,7 @@ export const fetchClosedOldIssuesAndPRs = async (before: Date) => {
   const response = await fetch(
     `${GITHUB_API}/search/issues?q=` +
       encodeURIComponent(
-        `is:closed is:unlocked closed:<${before.toISOString()} repo:go-gitea/gitea`,
+        `is:closed is:unlocked closed:<${before.toISOString()} repo:${TARGET_REPO}`,
       ),
     { headers: HEADERS },
   );
@@ -525,7 +526,7 @@ export const fetchClosedOldIssuesAndPRs = async (before: Date) => {
 // returns the last comment of the given issue
 export const fetchLastComment = async (issueNumber: number) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${issueNumber}/comments?per_page=1&sort=created&direction=desc`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}/comments?per_page=1&sort=created&direction=desc`,
     { headers: HEADERS },
   );
   const json = await response.json();
@@ -536,7 +537,7 @@ export const fetchLastComment = async (issueNumber: number) => {
 // closes the given issue
 export const closeIssue = async (issueNumber: number) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/issues/${issueNumber}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}`,
     {
       method: "PATCH",
       headers: HEADERS,
@@ -549,7 +550,7 @@ export const closeIssue = async (issueNumber: number) => {
 // closes the given PR
 export const closePr = async (prNumber: number) => {
   const response = await fetch(
-    `${GITHUB_API}/repos/go-gitea/gitea/pulls/${prNumber}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`,
     {
       method: "PATCH",
       headers: HEADERS,

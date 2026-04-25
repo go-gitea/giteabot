@@ -21,4 +21,4 @@ runs:
         BACKPORTER_GITHUB_TOKEN: ${{ inputs.github_token }}
         BACKPORTER_GITEA_FORK: ${{ inputs.gitea_fork }}
       run: |
-        deno run --allow-env --allow-net --allow-run --allow-read --allow-write --allow-sys src/action.ts
+        deno run --allow-env --allow-net --allow-run --allow-read --allow-write --allow-sys ${{ github.action_path }}/src/action.ts

@@ -1,5 +1,5 @@
 {
-  "version": "5",
+  "version": "3",
   "specifiers": {
     "jsr:@std/assert@0.196": "0.196.0",
     "jsr:@std/async@0.196": "0.196.0",

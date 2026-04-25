@@ -80,8 +80,8 @@ remind the TOC to review the PR.
 
 ## Usage (GitHub Action)
 
-1. Create a GitHub personal access token with access to `go-gitea/gitea` and your
-   fork.
+1. Create a GitHub personal access token with access to `go-gitea/gitea` and
+   your fork.
 2. Store the following secrets in the target repository:
 
 ```
@@ -99,7 +99,15 @@ on:
     branches:
       - main
   pull_request_target:
-    types: [opened, synchronize, labeled, unlabeled, closed, review_requested, review_request_removed]
+    types: [
+      opened,
+      synchronize,
+      labeled,
+      unlabeled,
+      closed,
+      review_requested,
+      review_request_removed,
+    ]
   pull_request_review:
     types: [submitted, edited, dismissed]
   schedule:
@@ -116,7 +124,8 @@ jobs:
           gitea_fork: ${{ secrets.BACKPORTER_GITEA_FORK }}
 ```
 
-For a more complete example with permissions, see `examples/workflows/gitea-backporter.yml`.
+For a more complete example with permissions, see
+`examples/workflows/gitea-backporter.yml`.
 
 ## Development
 

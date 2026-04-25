@@ -1,5 +1,4 @@
-export const TARGET_REPO =
-  Deno.env.get("BACKPORTER_REPO") ??
+export const TARGET_REPO = Deno.env.get("BACKPORTER_REPO") ??
   Deno.env.get("GITHUB_REPOSITORY") ??
   "go-gitea/gitea";
 

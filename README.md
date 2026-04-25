@@ -78,24 +78,45 @@ The script will close PRs with the label `pr/last-call` if two weeks have passed
 since they were updated. If one week has passed since they were updated, it will
 remind the TOC to review the PR.
 
-## Usage
+## Usage (GitHub Action)
 
-Set the following environment variables:
+1. Create a GitHub personal access token with access to `go-gitea/gitea` and your
+   fork.
+2. Store the following secrets in the target repository:
 
 ```
-BACKPORTER_GITHUB_TOKEN= # A GitHub personal access token with permissions to add labels to the go-gitea/gitea repo
-BACKPORTER_GITHUB_SECRET= # The secret that is used to sign the webhook payload (set in GitHub's webhook settings)
-BACKPORTER_GITEA_FORK= # The fork of go-gitea/gitea to push the backport branch to (e.g. yardenshoham/gitea)
+BACKPORTER_GITHUB_TOKEN= # GitHub personal access token
+BACKPORTER_GITEA_FORK= # Fork of go-gitea/gitea (e.g. yardenshoham/gitea)
 ```
 
-Then run:
+3. Add a workflow that invokes this action. A minimal example:
 
-```bash
-deno run --allow-net --allow-env --allow-run --allow-sys src/webhook.ts
+```yaml
+name: Gitea Backporter
+
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    types: [opened, synchronize, labeled, unlabeled, closed, review_requested, review_request_removed]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  schedule:
+    - cron: "15 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  backporter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: giteabot/gitea-backporter@v1
+        with:
+          github_token: ${{ secrets.BACKPORTER_GITHUB_TOKEN }}
+          gitea_fork: ${{ secrets.BACKPORTER_GITEA_FORK }}
 ```
 
-This will spin up a web server on port 8000. You can then set up a GitHub
-webhook on `/trigger` to run this bot.
+For a more complete example with permissions, see `examples/workflows/gitea-backporter.yml`.
 
 ## Development
 

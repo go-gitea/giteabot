@@ -1,0 +1,24 @@
+name: Gitea Backporter
+description: Run the Gitea backporter maintenance tasks as a GitHub Action
+author: GiteaBot
+inputs:
+  github_token:
+    description: GitHub token with access to go-gitea/gitea and your fork
+    required: true
+  gitea_fork:
+    description: Fork of go-gitea/gitea used to push backport branches (owner/repo)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Setup Deno
+      uses: denoland/setup-deno@v1
+      with:
+        deno-version: v1.x
+    - name: Run backporter
+      shell: bash
+      env:
+        BACKPORTER_GITHUB_TOKEN: ${{ inputs.github_token }}
+        BACKPORTER_GITEA_FORK: ${{ inputs.gitea_fork }}
+      run: |
+        deno run --allow-env --allow-net --allow-run --allow-read --allow-write --allow-sys src/action.ts

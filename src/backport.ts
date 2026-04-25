@@ -11,19 +11,35 @@ import {
 } from "./github.ts";
 import type { Issue } from "./types.ts";
 
-if (
-  !Deno.env.get("BACKPORTER_GITEA_FORK") ||
-  !Deno.env.get("BACKPORTER_GITHUB_TOKEN")
-) {
-  console.error(
-    "BACKPORTER_GITEA_FORK and BACKPORTER_GITHUB_TOKEN must be set",
-  );
-}
+let initialized = false;
+let initializing: Promise<void> | null = null;
 
-const user = await fetchCurrentUser();
-await initializeGitRepo(user.login, user.email);
+const initializeBackporter = async () => {
+  if (initialized) {
+    return;
+  }
+  if (!initializing) {
+    initializing = (async () => {
+      if (
+        !Deno.env.get("BACKPORTER_GITEA_FORK") ||
+        !Deno.env.get("BACKPORTER_GITHUB_TOKEN")
+      ) {
+        console.error(
+          "BACKPORTER_GITEA_FORK and BACKPORTER_GITHUB_TOKEN must be set",
+        );
+        return;
+      }
+
+      const user = await fetchCurrentUser();
+      await initializeGitRepo(user.login, user.email);
+      initialized = true;
+    })();
+  }
+  await initializing;
+};
 
 export const run = async () => {
+  await initializeBackporter();
   for (const giteaVersion of await fetchGiteaVersions()) {
     const candidates = await fetchCandidates(giteaVersion.majorMinorVersion);
     for (const candidate of candidates.items) {

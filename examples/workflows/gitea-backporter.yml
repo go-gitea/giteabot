@@ -1,0 +1,39 @@
+name: Gitea Backporter
+
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - labeled
+      - unlabeled
+      - closed
+      - review_requested
+      - review_request_removed
+  pull_request_review:
+    types:
+      - submitted
+      - edited
+      - dismissed
+  schedule:
+    - cron: "15 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  backporter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Gitea Backporter
+        uses: giteabot/gitea-backporter@v1
+        with:
+          github_token: ${{ secrets.BACKPORTER_GITHUB_TOKEN }}
+          gitea_fork: ${{ secrets.BACKPORTER_GITEA_FORK }}

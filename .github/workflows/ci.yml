@@ -19,3 +19,4 @@ jobs:
           BACKPORTER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BACKPORTER_GITEA_FORK: GiteaBot/gitea
           BACKPORTER_GITHUB_SECRET: dummy
+          BACKPORTER_REPO: go-gitea/gitea

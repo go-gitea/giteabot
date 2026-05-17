@@ -12,4 +12,6 @@ fmt:
 
 @PHONY: test
 test:
-	@deno test --quiet -A
+	@BACKPORTER_GITHUB_TOKEN="$${BACKPORTER_GITHUB_TOKEN:-$$(gh auth token 2>/dev/null)}" \
+	BACKPORTER_GITEA_FORK="$${BACKPORTER_GITEA_FORK:-GiteaBot/gitea}" \
+	deno test --quiet -A

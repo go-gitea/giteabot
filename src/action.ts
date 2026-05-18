@@ -2,7 +2,6 @@ import * as backport from "./backport.ts";
 import * as labels from "./labels.ts";
 import * as mergeQueue from "./mergeQueue.ts";
 import * as milestones from "./milestones.ts";
-import * as lgtm from "./lgtm.ts";
 import * as comments from "./comments.ts";
 import * as lock from "./lock.ts";
 import * as prActions from "./prActions.ts";
@@ -60,15 +59,6 @@ const handlePullRequest = async (
     }
   }
 
-  if (
-    action === "opened" ||
-    action === "synchronize" ||
-    action === "review_requested" ||
-    action === "review_request_removed"
-  ) {
-    await lgtm.setPrStatusAndLabel(pr);
-  }
-
   if (action === "closed") {
     if (pr?.merged && !pr?.milestone) {
       await milestones.assign(pr);
@@ -88,10 +78,6 @@ switch (eventName) {
   case "pull_request":
   case "pull_request_target": {
     await handlePullRequest(payload.action, payload.pull_request);
-    break;
-  }
-  case "pull_request_review": {
-    await lgtm.setPrStatusAndLabel(payload.pull_request);
     break;
   }
   case "schedule":

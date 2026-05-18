@@ -26,7 +26,6 @@ const handlePr = async (pr: {
 
   if (
     lastPrUpdateTime < oneWeekAgo &&
-    pr.labels.some((l) => l.name === "lgtm/need 1") &&
     !pr.labels.some((l) => l.name === "giteabot/toc-reminded")
   ) {
     console.log(`Reminding PR #${pr.number} due to pr/last-call timeout`);

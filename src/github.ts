@@ -163,26 +163,6 @@ export const updatePr = async (prNumber: number): Promise<Response> => {
   return response;
 };
 
-// sets a commit status
-export const setCommitStatus = (
-  sha: string,
-  state: "error" | "failure" | "pending" | "success",
-  description: string,
-) => {
-  return fetch(
-    `${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`,
-    {
-      method: "POST",
-      headers: HEADERS,
-      body: JSON.stringify({
-        state,
-        context: "giteabot/lgtm",
-        description,
-      }),
-    },
-  );
-};
-
 // get a target repo branch
 export const fetchBranch = async (branch: string) => {
   const response = await fetch(
@@ -405,12 +385,11 @@ export const createBackportPr = async (
   });
   const json = await response.json();
 
-  // filter lgtm/*, backport/*, reviewed/*, size/*, and pr/* labels
+  // filter backport/*, reviewed/*, size/*, and pr/* labels
   const labels = originalPr.labels
     .map((label) => label.name)
     .filter((label) => {
       return (
-        !label.startsWith("lgtm/") &&
         !label.startsWith("backport/") &&
         !label.startsWith("reviewed/") &&
         !label.startsWith("size/") &&

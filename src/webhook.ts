@@ -5,7 +5,6 @@ import * as backport from "./backport.ts";
 import * as labels from "./labels.ts";
 import * as mergeQueue from "./mergeQueue.ts";
 import * as milestones from "./milestones.ts";
-import * as lgtm from "./lgtm.ts";
 import * as comments from "./comments.ts";
 import * as lock from "./lock.ts";
 import * as prActions from "./prActions.ts";
@@ -82,22 +81,6 @@ webhook.on("pull_request.closed", ({ payload }) => {
     milestones.assign(payload.pull_request);
   }
 });
-
-// on pull request open, synchronization (push), and pull request review,
-// we'll update the lgtm status check and label
-webhook.on(
-  [
-    "pull_request.opened",
-    "pull_request.synchronize",
-    "pull_request.review_requested",
-    "pull_request.review_request_removed",
-    "pull_request_review",
-  ],
-  ({ payload }) => {
-    // @ts-expect-error -- unknown
-    lgtm.setPrStatusAndLabel(payload.pull_request);
-  },
-);
 
 // when PRs close, make sure no unmerged closed PRs have milestones
 webhook.on("pull_request.closed", () => {

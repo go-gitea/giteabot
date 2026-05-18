@@ -90,7 +90,7 @@ on:
     branches:
       - main
   pull_request_target:
-    types: [opened, synchronize, labeled, unlabeled, closed]
+    types: [opened, labeled, unlabeled, closed]
   schedule:
     - cron: "15 3 * * *"
   workflow_dispatch:

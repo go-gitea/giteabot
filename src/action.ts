@@ -8,13 +8,38 @@ import * as lock from "./lock.ts";
 import * as prActions from "./prActions.ts";
 import * as feedback from "./feedback.ts";
 import * as lastCall from "./lastCall.ts";
+import { type CheckName, parseEnabledChecks } from "./config.ts";
 
-const requiredEnv = ["BACKPORTER_GITEA_FORK", "BACKPORTER_GITHUB_TOKEN"];
+let enabledChecks: Set<CheckName>;
+try {
+  enabledChecks = parseEnabledChecks(Deno.env.get("BACKPORTER_CHECKS"));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  Deno.exit(1);
+}
+
+const requiredEnv = [
+  "BACKPORTER_GITHUB_TOKEN",
+  ...(enabledChecks.has("backport") ? ["BACKPORTER_GITEA_FORK"] : []),
+];
 const missingEnv = requiredEnv.filter((name) => !Deno.env.get(name));
 if (missingEnv.length > 0) {
   console.error(`Missing required env vars: ${missingEnv.join(", ")}`);
   Deno.exit(1);
 }
+
+const shouldRunCheck = (checkName: CheckName) => enabledChecks.has(checkName);
+
+const runCheck = async (
+  checkName: CheckName,
+  callback: () => unknown,
+) => {
+  if (!shouldRunCheck(checkName)) {
+    console.info(`Skipping ${checkName} check`);
+    return;
+  }
+  await callback();
+};
 
 const eventName = Deno.env.get("GITHUB_EVENT_NAME");
 const eventPath = Deno.env.get("GITHUB_EVENT_PATH");
@@ -28,12 +53,12 @@ const payloadText = await Deno.readTextFile(eventPath);
 const payload = JSON.parse(payloadText);
 
 const runMaintenance = async () => {
-  await labels.run();
-  await mergeQueue.run();
-  await lock.run();
-  await feedback.run();
-  await lastCall.run();
-  await milestones.run();
+  await runCheck("labels", () => labels.run());
+  await runCheck("merge_queue", () => mergeQueue.run());
+  await runCheck("lock", () => lock.run());
+  await runCheck("feedback", () => feedback.run());
+  await runCheck("last_call", () => lastCall.run());
+  await runCheck("milestones", () => milestones.run());
 };
 
 const handlePullRequest = async (
@@ -43,20 +68,23 @@ const handlePullRequest = async (
   if (action === "labeled" || action === "unlabeled") {
     const labelName = payload.label?.name;
     if (labelName && labels.isRelevantLabel(labelName)) {
-      await labels.run();
-      await mergeQueue.run();
-      await prActions.run(labelName, pr);
+      await runCheck("labels", () => labels.run());
+      await runCheck("merge_queue", () => mergeQueue.run());
+      await runCheck("pr_actions", () => prActions.run(labelName, pr));
     }
     return;
   }
 
   if (action === "opened") {
-    await labels.run();
+    await runCheck("labels", () => labels.run());
     if (pr?.base?.ref === "main") {
-      await comments.commentIfTranslationsChanged(pr);
+      await runCheck(
+        "translation_comment",
+        () => comments.commentIfTranslationsChanged(pr),
+      );
     }
     if (pr?.base?.ref?.startsWith("release/")) {
-      await milestones.assign(pr);
+      await runCheck("milestones", () => milestones.assign(pr));
     }
   }
 
@@ -66,20 +94,20 @@ const handlePullRequest = async (
     action === "review_requested" ||
     action === "review_request_removed"
   ) {
-    await lgtm.setPrStatusAndLabel(pr);
+    await runCheck("lgtm", () => lgtm.setPrStatusAndLabel(pr));
   }
 
   if (action === "closed") {
-    if (pr?.merged && !pr?.milestone) {
+    if (pr?.merged && !pr?.milestone && shouldRunCheck("milestones")) {
       await milestones.assign(pr);
     }
-    await milestones.run();
+    await runCheck("milestones", () => milestones.run());
   }
 };
 
 switch (eventName) {
   case "push": {
-    if (payload.ref === "refs/heads/main") {
+    if (payload.ref === "refs/heads/main" && shouldRunCheck("backport")) {
       await backport.run();
     }
     await runMaintenance();
@@ -91,7 +119,10 @@ switch (eventName) {
     break;
   }
   case "pull_request_review": {
-    await lgtm.setPrStatusAndLabel(payload.pull_request);
+    await runCheck(
+      "lgtm",
+      () => lgtm.setPrStatusAndLabel(payload.pull_request),
+    );
     break;
   }
   case "schedule":

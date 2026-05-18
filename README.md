@@ -86,7 +86,7 @@ remind the TOC to review the PR.
 
 ```
 BACKPORTER_GITHUB_TOKEN= # GitHub personal access token
-BACKPORTER_GITEA_FORK= # Fork of go-gitea/gitea (e.g. yardenshoham/gitea)
+BACKPORTER_GITEA_FORK= # Fork of go-gitea/gitea (e.g. yardenshoham/gitea), only needed for the backport check
 ```
 
 3. Add a workflow that invokes this action. A minimal example:
@@ -122,10 +122,35 @@ jobs:
         with:
           github_token: ${{ secrets.BACKPORTER_GITHUB_TOKEN }}
           gitea_fork: ${{ secrets.BACKPORTER_GITEA_FORK }}
+          checks: all
 ```
 
 For a more complete example with permissions, see
 `examples/workflows/gitea-backporter.yml`.
+
+The optional `checks` input controls which bot checks run in a workflow. It
+accepts `all`, `none`, or a comma-separated list from:
+
+- `backport`
+- `labels`
+- `merge_queue`
+- `lock`
+- `feedback`
+- `last_call`
+- `milestones`
+- `lgtm`
+- `translation_comment`
+- `pr_actions`
+
+For example, to run only label cleanup and milestone maintenance:
+
+```yaml
+- uses: giteabot/gitea-backporter@v1
+  with:
+    github_token: ${{ secrets.BACKPORTER_GITHUB_TOKEN }}
+    gitea_fork: ${{ secrets.BACKPORTER_GITEA_FORK }}
+    checks: labels,milestones
+```
 
 ## Development
 

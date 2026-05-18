@@ -6,8 +6,12 @@ inputs:
     description: GitHub token with access to go-gitea/gitea and your fork
     required: true
   gitea_fork:
-    description: Fork of go-gitea/gitea used to push backport branches (owner/repo)
-    required: true
+    description: Fork of go-gitea/gitea used to push backport branches (owner/repo); required when the backport check is enabled
+    required: false
+  checks:
+    description: Comma-separated list of checks to run. Use all or none, or select from backport, labels, merge_queue, lock, feedback, last_call, milestones, lgtm, translation_comment, pr_actions.
+    required: false
+    default: all
 runs:
   using: composite
   steps:
@@ -20,5 +24,6 @@ runs:
       env:
         BACKPORTER_GITHUB_TOKEN: ${{ inputs.github_token }}
         BACKPORTER_GITEA_FORK: ${{ inputs.gitea_fork }}
+        BACKPORTER_CHECKS: ${{ inputs.checks }}
       run: |
         deno run --allow-env --allow-net --allow-run --allow-read --allow-write --allow-sys ${{ github.action_path }}/src/action.ts

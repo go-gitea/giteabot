@@ -112,7 +112,7 @@ export const fetchMergedWithLabel = (label: string) => {
 
 // returns a list of open issues with the given label
 export const fetchOpenIssuesWithLabel = (label: string) => {
-  return fetchSearchResults<{ number: number }>(
+  return fetchSearchResults<{ number: number; updated_at: string }>(
     `is:issue is:open label:${label} repo:${TARGET_REPO}`,
   );
 };

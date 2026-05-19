@@ -1,7 +1,6 @@
 import * as SemVer from "@std/semver";
 import { fetchGiteaVersions } from "./giteaVersion.ts";
 import * as github from "./github.ts";
-import type { PullRequest } from "./types.ts";
 
 // given a PR number, set the milestone of the PR according to its base branch
 export const assign = async (pr: { number: number; base: { ref: string } }) => {
@@ -59,7 +58,7 @@ const removeMilestonesFromUnmergedClosedPrs = async () => {
   // and remove the milestone each PR
   return Promise.all(milestones.flatMap(async (m) => {
     const prs = await github.fetchUnmergedClosedWithMilestone(m.title);
-    return prs.items.map(async (pr: PullRequest) => {
+    return Promise.all(prs.items.map(async (pr) => {
       const response = await github.removeMilestone(pr.number);
       if (!response.ok) {
         console.error(
@@ -69,6 +68,6 @@ const removeMilestonesFromUnmergedClosedPrs = async () => {
         return;
       }
       console.log(`Removed milestone from closed PR #${pr.number}`);
-    });
+    }));
   }));
 };

@@ -1,12 +1,86 @@
-import { assertEquals, assertFalse } from "@std/testing/asserts";
+import { assertEquals, assertFalse, assertRejects } from "@std/testing/asserts";
 import {
   backportPrExists,
   fetchBranch,
+  fetchCandidates,
   fetchLastComment,
   fetchPr,
   fetchPrFileNames,
   getPrReviewers,
 } from "./github.ts";
+
+Deno.test("fetchCandidates() retries GitHub search failures", async () => {
+  const originalFetch = globalThis.fetch;
+  let attempts = 0;
+  globalThis.fetch = (() => {
+    attempts++;
+    if (attempts < 2) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            message: "You have exceeded a secondary rate limit.",
+          }),
+          {
+            status: 429,
+            headers: {
+              "Content-Type": "application/json",
+              "Retry-After": "0.001",
+            },
+          },
+        ),
+      );
+    }
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          total_count: 1,
+          incomplete_results: false,
+          items: [{ number: 123 }],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchCandidates("1.26");
+    assertEquals(attempts, 2);
+    assertEquals(result.items.length, 1);
+    assertEquals(result.items[0].number, 123);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("fetchCandidates() throws the GitHub API error payload", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() => {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          message: "Bad credentials",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+  }) as typeof fetch;
+
+  try {
+    await assertRejects(
+      () => fetchCandidates("1.26"),
+      Error,
+      "Bad credentials",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 Deno.test("getPrReviewers() returns the appropriate approvers", async () => {
   const prToApproversAndBlockers = {

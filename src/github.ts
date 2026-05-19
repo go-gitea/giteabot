@@ -2,13 +2,92 @@ import { lt, parse, valid } from "@std/semver";
 import { getPrBranchName } from "./git.ts";
 import { GiteaVersion } from "./giteaVersion.ts";
 import { backportPrExistsCache } from "./state.ts";
-import { PullRequest } from "./types.ts";
+import { Issue, PullRequest } from "./types.ts";
 import { TARGET_REPO } from "./config.ts";
 
 const GITHUB_API = "https://api.github.com";
 const HEADERS = {
   "Content-Type": "application/json",
   Authorization: `Bearer ${Deno.env.get("BACKPORTER_GITHUB_TOKEN")}`,
+};
+
+type SearchResults<T> = {
+  items: T[];
+  total_count: number;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getSearchRetryDelay = (response: Response, message: string) => {
+  const retryAfterHeader = response.headers.get("retry-after");
+  const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return retryAfterSeconds * 1000;
+  }
+
+  const rateLimitRemaining = Number(
+    response.headers.get("x-ratelimit-remaining"),
+  );
+  const rateLimitReset = Number(response.headers.get("x-ratelimit-reset"));
+  if (
+    rateLimitRemaining === 0 &&
+    Number.isFinite(rateLimitReset) &&
+    rateLimitReset > 0
+  ) {
+    return Math.max(rateLimitReset * 1000 - Date.now(), 1000);
+  }
+
+  if (
+    response.status === 429 ||
+    (response.status === 403 && message.includes("rate limit"))
+  ) {
+    return 1000;
+  }
+
+  if (response.status >= 500) {
+    return 1000;
+  }
+
+  return null;
+};
+
+const fetchSearchResults = async <T>(
+  query: string,
+): Promise<SearchResults<T>> => {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const response = await fetch(
+      `${GITHUB_API}/search/issues?q=` + encodeURIComponent(query),
+      { headers: HEADERS },
+    );
+    const json = await response.json();
+    if (response.ok && Array.isArray(json.items)) {
+      return json as SearchResults<T>;
+    }
+
+    const message = typeof json?.message === "string"
+      ? json.message.toLowerCase()
+      : "";
+    const retryDelay = getSearchRetryDelay(response, message);
+    if (attempt < 2 && retryDelay !== null) {
+      console.warn(
+        `GitHub search failed on attempt ${attempt} for query ${
+          JSON.stringify(query)
+        }. Retrying in ${retryDelay}ms.`,
+      );
+      await sleep(retryDelay);
+      continue;
+    }
+
+    throw new Error(
+      `GitHub search failed for query ${JSON.stringify(query)}: ${
+        JSON.stringify(json)
+      }`,
+    );
+  }
+
+  throw new Error(
+    `GitHub search exhausted retries for query ${JSON.stringify(query)}`,
+  );
 };
 
 // return the current user
@@ -18,115 +97,63 @@ export const fetchCurrentUser = async () => {
 };
 
 // returns a list of PRs that are merged and have the backport label for the current Gitea version
-export const fetchCandidates = async (giteaMajorMinorVersion: string) => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr is:merged base:main label:backport/v${giteaMajorMinorVersion} -label:backport/done -label:backport/manual repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+export const fetchCandidates = (giteaMajorMinorVersion: string) => {
+  return fetchSearchResults<Issue>(
+    `is:pr is:merged base:main label:backport/v${giteaMajorMinorVersion} -label:backport/done -label:backport/manual repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of PRs that are merged and have the given label
-export const fetchMergedWithLabel = async (label: string) => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr is:merged label:${label} repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+export const fetchMergedWithLabel = (label: string) => {
+  return fetchSearchResults<{ title: string; number: number }>(
+    `is:pr is:merged label:${label} repo:${TARGET_REPO}`,
   );
-  if (!response.ok) {
-    console.error(await response.text());
-    return;
-  }
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of open issues with the given label
-export const fetchOpenIssuesWithLabel = async (label: string) => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:issue is:open label:${label} repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+export const fetchOpenIssuesWithLabel = (label: string) => {
+  return fetchSearchResults<{ number: number }>(
+    `is:issue is:open label:${label} repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of open PRs with the given label
-export const fetchOpenPrsWithLabel = async (label: string) => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr is:open label:${label} repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+export const fetchOpenPrsWithLabel = (label: string) => {
+  return fetchSearchResults<PullRequest>(
+    `is:pr is:open label:${label} repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of PRs pending merge (have the label reviewed/wait-merge)
-export const fetchPendingMerge = async () => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr is:open label:reviewed/wait-merge sort:created-asc repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+export const fetchPendingMerge = () => {
+  return fetchSearchResults<PullRequest>(
+    `is:pr is:open label:reviewed/wait-merge sort:created-asc repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of PRs that target the given branch
-export const fetchTargeting = async (
+export const fetchTargeting = (
   branch: string,
-): Promise<{ items: PullRequest[] }> => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr base:${branch} repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+): Promise<SearchResults<PullRequest>> => {
+  return fetchSearchResults<PullRequest>(
+    `is:pr base:${branch} repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of closed PRs that have the given milestone
-export const fetchUnmergedClosedWithMilestone = async (
+export const fetchUnmergedClosedWithMilestone = (
   milestoneTitle: string,
 ) => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr is:closed is:unmerged milestone:${milestoneTitle} repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+  return fetchSearchResults<{ number: number }>(
+    `is:pr is:closed is:unmerged milestone:${milestoneTitle} repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of breaking PRs that don't have the label pr/breaking
-export const fetchBreakingWithoutLabel = async () => {
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr "## :warning: BREAKING" -label:pr/breaking repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+export const fetchBreakingWithoutLabel = () => {
+  return fetchSearchResults<{ number: number }>(
+    `is:pr "## :warning: BREAKING" -label:pr/breaking repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns a list of files changed in the given PR number
@@ -260,21 +287,16 @@ export const backportPrExists = async (
     return true;
   }
 
-  let response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:pr is:open repo:${TARGET_REPO} base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`,
-      ),
-    { headers: HEADERS },
+  const searchResults = await fetchSearchResults<{ number: number }>(
+    `is:pr is:open repo:${TARGET_REPO} base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`,
   );
-  const json = await response.json();
-  if (json.total_count > 0) {
+  if (searchResults.total_count > 0) {
     backportPrExistsCache.add(cacheKey);
     return true;
   }
 
   // also check if a branch that looks like the backport branch (getPrBranchName) exists
-  response = await fetch(
+  const response = await fetch(
     `${GITHUB_API}/repos/${Deno.env.get("BACKPORTER_GITEA_FORK")}/branches/${
       getPrBranchName(pr.number, giteaMajorMinorVersion)
     }`,
@@ -509,18 +531,16 @@ export const lockIssue = async (
 };
 
 // returns issues that are unlocked, closed and have been closed before the given date. Only the first 30 results are returned.
-export const fetchClosedOldIssuesAndPRs = async (before: Date) => {
+export const fetchClosedOldIssuesAndPRs = (before: Date) => {
   // if we ever become a GitHub app, we need to separate the search query into
   // two queries, one for issues and one for PRs, and then merge the results
-  const response = await fetch(
-    `${GITHUB_API}/search/issues?q=` +
-      encodeURIComponent(
-        `is:closed is:unlocked closed:<${before.toISOString()} repo:${TARGET_REPO}`,
-      ),
-    { headers: HEADERS },
+  return fetchSearchResults<{
+    number: number;
+    pull_request?: { url: string };
+    updated_at: string;
+  }>(
+    `is:closed is:unlocked closed:<${before.toISOString()} repo:${TARGET_REPO}`,
   );
-  const json = await response.json();
-  return json;
 };
 
 // returns the last comment of the given issue

@@ -98,9 +98,9 @@ const fetchSearchResults = async <T>(
   );
 };
 
-const fetchListPage = async <T>(
-  url: string,
-): Promise<{ items: T[]; nextUrl: string | null }> => {
+type Page<T> = { items: T[]; nextUrl: string | null };
+
+const fetchListPage = async <T>(url: string): Promise<Page<T>> => {
   for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
     const response = await fetch(url, { headers: HEADERS });
     const json = await response.json();
@@ -134,8 +134,7 @@ const fetchList = async <T>(path: string): Promise<T[]> => {
   const all: T[] = [];
   let url: string | null = `${GITHUB_API}${path}`;
   while (url) {
-    const { items, nextUrl }: { items: T[]; nextUrl: string | null } =
-      await fetchListPage<T>(url);
+    const { items, nextUrl }: Page<T> = await fetchListPage<T>(url);
     all.push(...items);
     url = nextUrl;
   }

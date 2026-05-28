@@ -98,13 +98,16 @@ const fetchSearchResults = async <T>(
   );
 };
 
-// core 5000/hr bucket, vs fetchSearchResults' 30/min search bucket
-const fetchList = async <T>(path: string): Promise<T[]> => {
+const fetchListPage = async <T>(
+  url: string,
+): Promise<{ items: T[]; nextUrl: string | null }> => {
   for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
-    const response = await fetch(`${GITHUB_API}${path}`, { headers: HEADERS });
+    const response = await fetch(url, { headers: HEADERS });
     const json = await response.json();
     if (response.ok && Array.isArray(json)) {
-      return json as T[];
+      const link = response.headers.get("link") ?? "";
+      const nextMatch = link.match(/<([^>]+)>;\s*rel="next"/);
+      return { items: json as T[], nextUrl: nextMatch?.[1] ?? null };
     }
 
     const message = typeof json?.message === "string"
@@ -113,18 +116,30 @@ const fetchList = async <T>(path: string): Promise<T[]> => {
     const retryDelay = getRetryDelay(response, message);
     if (attempt < FETCH_MAX_ATTEMPTS && retryDelay !== null) {
       console.warn(
-        `GitHub list ${path} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
+        `GitHub list ${url} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
       );
       await sleep(retryDelay);
       continue;
     }
 
-    throw new Error(
-      `GitHub list ${path} failed: ${JSON.stringify(json)}`,
-    );
+    throw new Error(`GitHub list ${url} failed: ${JSON.stringify(json)}`);
   }
 
-  throw new Error(`GitHub list ${path} exhausted retries`);
+  throw new Error(`GitHub list ${url} exhausted retries`);
+};
+
+// paginates via the Link header so callers see all results, not just page 1
+// core 5000/hr bucket, vs fetchSearchResults' 30/min search bucket
+const fetchList = async <T>(path: string): Promise<T[]> => {
+  const all: T[] = [];
+  let url: string | null = `${GITHUB_API}${path}`;
+  while (url) {
+    const { items, nextUrl }: { items: T[]; nextUrl: string | null } =
+      await fetchListPage<T>(url);
+    all.push(...items);
+    url = nextUrl;
+  }
+  return all;
 };
 
 // return the current user

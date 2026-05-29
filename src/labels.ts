@@ -55,26 +55,19 @@ const removeLabelFromMergedPr = async (
 
 const removeLabelsFromMergedPr = (labels: string[]) => {
   return Promise.all(labels.map(async (label) => {
-    const prsThatAreMergedAndHaveTheLabel = await fetchMergedWithLabel(label);
-    return Promise.all(
-      prsThatAreMergedAndHaveTheLabel?.items?.map(
-        (pr: { title: string; number: number }) =>
-          removeLabelFromMergedPr(pr, label),
-      ),
-    );
+    const prs = await fetchMergedWithLabel(label);
+    return Promise.all(prs.map((pr) => removeLabelFromMergedPr(pr, label)));
   }));
 };
 
-// for each gitea version, fetch all PRs that target that version and remove the
-// backport/* labels from them
+// for each gitea version, fetch open PRs that target that version and remove
+// the backport/* labels from them
 export const removeBackportLabelsFromPrsTargetingReleaseBranches = async () => {
   const giteaVersions = await fetchGiteaVersions();
-  // versions
   return Promise.all(giteaVersions.map(async (version) => {
     const prs = await fetchTargeting(`release/v${version.majorMinorVersion}`);
-    // PRs
     try {
-      return removeBackportLabelsFromPrs(prs.items);
+      return removeBackportLabelsFromPrs(prs);
     } catch (error) {
       // we usually get here when GitHub rate limits us
       console.error(error, JSON.stringify(prs));

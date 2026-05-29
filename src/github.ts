@@ -18,11 +18,15 @@ type SearchResults<T> = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const getSearchRetryDelay = (response: Response, message: string) => {
+// give up retrying when the reset is further out than this — short waits only
+const MAX_RETRY_DELAY_MS = 60000;
+const capOrFail = (ms: number) => ms > MAX_RETRY_DELAY_MS ? null : ms;
+
+const getRetryDelay = (response: Response, message: string) => {
   const retryAfterHeader = response.headers.get("retry-after");
   const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-    return retryAfterSeconds * 1000;
+    return capOrFail(retryAfterSeconds * 1000);
   }
 
   const rateLimitRemaining = Number(
@@ -34,7 +38,7 @@ const getSearchRetryDelay = (response: Response, message: string) => {
     Number.isFinite(rateLimitReset) &&
     rateLimitReset > 0
   ) {
-    return Math.max(rateLimitReset * 1000 - Date.now(), 1000);
+    return capOrFail(Math.max(rateLimitReset * 1000 - Date.now(), 1000));
   }
 
   if (
@@ -51,43 +55,54 @@ const getSearchRetryDelay = (response: Response, message: string) => {
   return null;
 };
 
-const fetchSearchResults = async <T>(
-  query: string,
-): Promise<SearchResults<T>> => {
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const response = await fetch(
-      `${GITHUB_API}/search/issues?q=` + encodeURIComponent(query),
-      { headers: HEADERS },
-    );
-    const json = await response.json();
-    if (response.ok && Array.isArray(json.items)) {
-      return json as SearchResults<T>;
-    }
+const FETCH_MAX_ATTEMPTS = 5;
+
+const fetchJSON = async (url: string, label: string) => {
+  for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
+    const response = await fetch(url, { headers: HEADERS });
+    const json = await response.json().catch(() => null);
+    if (response.ok && json !== null) return { response, json };
 
     const message = typeof json?.message === "string"
       ? json.message.toLowerCase()
       : "";
-    const retryDelay = getSearchRetryDelay(response, message);
-    if (attempt < 2 && retryDelay !== null) {
+    const retryDelay = getRetryDelay(response, message);
+    if (attempt < FETCH_MAX_ATTEMPTS && retryDelay !== null) {
       console.warn(
-        `GitHub search failed on attempt ${attempt} for query ${
-          JSON.stringify(query)
-        }. Retrying in ${retryDelay}ms.`,
+        `${label} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
       );
       await sleep(retryDelay);
       continue;
     }
 
-    throw new Error(
-      `GitHub search failed for query ${JSON.stringify(query)}: ${
-        JSON.stringify(json)
-      }`,
-    );
+    throw new Error(`${label} failed: ${JSON.stringify(json)}`);
   }
+  throw new Error(`${label} exhausted retries`);
+};
 
-  throw new Error(
-    `GitHub search exhausted retries for query ${JSON.stringify(query)}`,
+const fetchSearchResults = async <T>(
+  query: string,
+): Promise<SearchResults<T>> => {
+  const { json } = await fetchJSON(
+    `${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}`,
+    `GitHub search ${JSON.stringify(query)}`,
   );
+  return json;
+};
+
+// paginates via the Link header so callers see all results, not just page 1
+// core 5000/hr bucket, vs fetchSearchResults' 30/min search bucket
+const fetchList = async <T>(path: string): Promise<T[]> => {
+  const all: T[] = [];
+  let url: string | null = `${GITHUB_API}${path}`;
+  while (url) {
+    const { response, json } = await fetchJSON(url, `GitHub list ${url}`);
+    all.push(...(json as T[]));
+    const next = (response.headers.get("link") ?? "")
+      .match(/<([^>]+)>[^,]*?\brel="next"/);
+    url = next?.[1] ?? null;
+  }
+  return all;
 };
 
 // return the current user
@@ -103,40 +118,55 @@ export const fetchCandidates = (giteaMajorMinorVersion: string) => {
   );
 };
 
-// returns a list of PRs that are merged and have the given label
-export const fetchMergedWithLabel = (label: string) => {
-  return fetchSearchResults<{ title: string; number: number }>(
-    `is:pr is:merged label:${label} repo:${TARGET_REPO}`,
-  );
+type ListIssue = {
+  number: number;
+  title: string;
+  updated_at: string;
+  user: { login: string };
+  labels: { name: string }[];
+  pull_request?: { merged_at: string | null };
 };
+
+const fetchIssuesByLabel = (
+  state: "open" | "closed",
+  label: string,
+  suffix = "",
+) =>
+  fetchList<ListIssue>(
+    `/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&labels=${
+      encodeURIComponent(label)
+    }${suffix}`,
+  );
+
+// returns a list of PRs that are merged and have the given label
+export const fetchMergedWithLabel = async (label: string) =>
+  (await fetchIssuesByLabel("closed", label))
+    .filter((item) => item.pull_request?.merged_at);
 
 // returns a list of open issues with the given label
-export const fetchOpenIssuesWithLabel = (label: string) => {
-  return fetchSearchResults<{ number: number; updated_at: string }>(
-    `is:issue is:open label:${label} repo:${TARGET_REPO}`,
-  );
-};
+export const fetchOpenIssuesWithLabel = async (label: string) =>
+  (await fetchIssuesByLabel("open", label))
+    .filter((item) => !item.pull_request);
 
 // returns a list of open PRs with the given label
-export const fetchOpenPrsWithLabel = (label: string) => {
-  return fetchSearchResults<PullRequest>(
-    `is:pr is:open label:${label} repo:${TARGET_REPO}`,
-  );
-};
+export const fetchOpenPrsWithLabel = async (label: string) =>
+  (await fetchIssuesByLabel("open", label))
+    .filter((item) => item.pull_request);
 
 // returns a list of PRs pending merge (have the label reviewed/wait-merge)
-export const fetchPendingMerge = () => {
-  return fetchSearchResults<PullRequest>(
-    `is:pr is:open label:reviewed/wait-merge sort:created-asc repo:${TARGET_REPO}`,
-  );
-};
+export const fetchPendingMerge = async () =>
+  (await fetchIssuesByLabel(
+    "open",
+    "reviewed/wait-merge",
+    "&sort=created&direction=asc",
+  )).filter((item) => item.pull_request);
 
-// returns a list of PRs that target the given branch
-export const fetchTargeting = (
-  branch: string,
-): Promise<SearchResults<PullRequest>> => {
-  return fetchSearchResults<PullRequest>(
-    `is:pr base:${branch} repo:${TARGET_REPO}`,
+// returns a list of open PRs that target the given branch
+export const fetchTargeting = (branch: string): Promise<PullRequest[]> => {
+  return fetchList<PullRequest>(
+    `/repos/${TARGET_REPO}/pulls?per_page=100&state=open&base=${
+      encodeURIComponent(branch)
+    }`,
   );
 };
 
@@ -217,6 +247,21 @@ export const fetchBranch = async (branch: string) => {
     { headers: HEADERS },
   );
   return response.json();
+};
+
+// throws on non-404 (auth/rate-limit/5xx) — only 404 means "doesn't exist"
+export const branchExists = async (branch: string): Promise<boolean> => {
+  const response = await fetch(
+    `${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`,
+    { headers: HEADERS, method: "HEAD" },
+  );
+  if (response.status === 404) return false;
+  if (!response.ok) {
+    throw new Error(
+      `branchExists(${branch}) failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  return true;
 };
 
 // checks if the given PR needs to be updated

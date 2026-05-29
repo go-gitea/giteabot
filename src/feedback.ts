@@ -2,10 +2,8 @@ import { addComment, closeIssue, fetchOpenIssuesWithLabel } from "./github.ts";
 
 export const run = async () => {
   // get all issues with the label "status/needs-feedback"
-  const issuesWithStatusNeedsFeedback = await fetchOpenIssuesWithLabel(
-    "issue/needs-feedback",
-  );
-  return Promise.all(issuesWithStatusNeedsFeedback.items.map(handleIssue));
+  const issues = await fetchOpenIssuesWithLabel("issue/needs-feedback");
+  return Promise.all(issues.map(handleIssue));
 };
 
 // close issue if a month has passed since it was last updated

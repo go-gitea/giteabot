@@ -7,11 +7,9 @@ import {
 } from "./github.ts";
 
 export const run = async () => {
-  // get all issues with the label "pr/last-call"
-  const issuesWithStatusPrLastCall = await fetchOpenPrsWithLabel(
-    "pr/last-call",
-  );
-  return Promise.all(issuesWithStatusPrLastCall.items.map(handlePr));
+  // get all PRs with the label "pr/last-call"
+  const prs = await fetchOpenPrsWithLabel("pr/last-call");
+  return Promise.all(prs.map(handlePr));
 };
 
 // close PR if two weeks have passed since it was last updated. Remind TOC if one week has passed

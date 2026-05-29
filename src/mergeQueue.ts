@@ -3,11 +3,8 @@ import * as prActions from "./prActions.ts";
 import { debounce } from "@std/async";
 
 const updateBranch = async () => {
-  // fetch all PRs that are pending merge
-  const pendingMerge = await fetchPendingMerge();
-
   // update all PRs pending merge (only if they need an update)
-  for (const pr of pendingMerge.items) {
+  for (const pr of await fetchPendingMerge()) {
     const err = await prActions.updateBranch(pr);
 
     if (err?.message == "merge conflicts in PR") {

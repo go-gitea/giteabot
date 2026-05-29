@@ -41,11 +41,13 @@ const initializeBackporter = async () => {
 
 export const run = async () => {
   await initializeBackporter();
-  for (const giteaVersion of await fetchGiteaVersions()) {
-    // skip the in-development next-minor milestone (no release branch yet)
-    if (!await branchExists(`release/v${giteaVersion.majorMinorVersion}`)) {
-      continue;
-    }
+  const versions = await fetchGiteaVersions();
+  // skip the in-development next-minor milestone (no release branch yet)
+  const hasBranch = await Promise.all(
+    versions.map((v) => branchExists(`release/v${v.majorMinorVersion}`)),
+  );
+  for (const [index, giteaVersion] of versions.entries()) {
+    if (!hasBranch[index]) continue;
     const candidates = await fetchCandidates(giteaVersion.majorMinorVersion);
     for (const candidate of candidates.items) {
       console.log("Parsing #" + candidate.number);

@@ -18,14 +18,15 @@ type SearchResults<T> = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// cap retry waits — core-bucket reset is up to 1hr; 60s covers search reset
+// give up retrying when the reset is further out than this — short waits only
 const MAX_RETRY_DELAY_MS = 60000;
+const capOrFail = (ms: number) => ms > MAX_RETRY_DELAY_MS ? null : ms;
 
 const getRetryDelay = (response: Response, message: string) => {
   const retryAfterHeader = response.headers.get("retry-after");
   const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
   if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-    return Math.min(retryAfterSeconds * 1000, MAX_RETRY_DELAY_MS);
+    return capOrFail(retryAfterSeconds * 1000);
   }
 
   const rateLimitRemaining = Number(
@@ -37,10 +38,7 @@ const getRetryDelay = (response: Response, message: string) => {
     Number.isFinite(rateLimitReset) &&
     rateLimitReset > 0
   ) {
-    return Math.min(
-      Math.max(rateLimitReset * 1000 - Date.now(), 1000),
-      MAX_RETRY_DELAY_MS,
-    );
+    return capOrFail(Math.max(rateLimitReset * 1000 - Date.now(), 1000));
   }
 
   if (
@@ -59,73 +57,37 @@ const getRetryDelay = (response: Response, message: string) => {
 
 const FETCH_MAX_ATTEMPTS = 5;
 
+const fetchJSON = async (url: string, label: string) => {
+  for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
+    const response = await fetch(url, { headers: HEADERS });
+    const json = await response.json().catch(() => null);
+    if (response.ok && json !== null) return { response, json };
+
+    const message = typeof json?.message === "string"
+      ? json.message.toLowerCase()
+      : "";
+    const retryDelay = getRetryDelay(response, message);
+    if (attempt < FETCH_MAX_ATTEMPTS && retryDelay !== null) {
+      console.warn(
+        `${label} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
+      );
+      await sleep(retryDelay);
+      continue;
+    }
+
+    throw new Error(`${label} failed: ${JSON.stringify(json)}`);
+  }
+  throw new Error(`${label} exhausted retries`);
+};
+
 const fetchSearchResults = async <T>(
   query: string,
 ): Promise<SearchResults<T>> => {
-  for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
-    const response = await fetch(
-      `${GITHUB_API}/search/issues?q=` + encodeURIComponent(query),
-      { headers: HEADERS },
-    );
-    const json = await response.json();
-    if (response.ok && Array.isArray(json.items)) {
-      return json as SearchResults<T>;
-    }
-
-    const message = typeof json?.message === "string"
-      ? json.message.toLowerCase()
-      : "";
-    const retryDelay = getRetryDelay(response, message);
-    if (attempt < FETCH_MAX_ATTEMPTS && retryDelay !== null) {
-      console.warn(
-        `GitHub search failed on attempt ${attempt} for query ${
-          JSON.stringify(query)
-        }. Retrying in ${retryDelay}ms.`,
-      );
-      await sleep(retryDelay);
-      continue;
-    }
-
-    throw new Error(
-      `GitHub search failed for query ${JSON.stringify(query)}: ${
-        JSON.stringify(json)
-      }`,
-    );
-  }
-
-  throw new Error(
-    `GitHub search exhausted retries for query ${JSON.stringify(query)}`,
+  const { json } = await fetchJSON(
+    `${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}`,
+    `GitHub search ${JSON.stringify(query)}`,
   );
-};
-
-type Page<T> = { items: T[]; nextUrl: string | null };
-
-const fetchListPage = async <T>(url: string): Promise<Page<T>> => {
-  for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
-    const response = await fetch(url, { headers: HEADERS });
-    const json = await response.json();
-    if (response.ok && Array.isArray(json)) {
-      const link = response.headers.get("link") ?? "";
-      const nextMatch = link.match(/<([^>]+)>;\s*rel="next"/);
-      return { items: json as T[], nextUrl: nextMatch?.[1] ?? null };
-    }
-
-    const message = typeof json?.message === "string"
-      ? json.message.toLowerCase()
-      : "";
-    const retryDelay = getRetryDelay(response, message);
-    if (attempt < FETCH_MAX_ATTEMPTS && retryDelay !== null) {
-      console.warn(
-        `GitHub list ${url} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
-      );
-      await sleep(retryDelay);
-      continue;
-    }
-
-    throw new Error(`GitHub list ${url} failed: ${JSON.stringify(json)}`);
-  }
-
-  throw new Error(`GitHub list ${url} exhausted retries`);
+  return json;
 };
 
 // paginates via the Link header so callers see all results, not just page 1
@@ -134,9 +96,11 @@ const fetchList = async <T>(path: string): Promise<T[]> => {
   const all: T[] = [];
   let url: string | null = `${GITHUB_API}${path}`;
   while (url) {
-    const { items, nextUrl }: Page<T> = await fetchListPage<T>(url);
-    all.push(...items);
-    url = nextUrl;
+    const { response, json } = await fetchJSON(url, `GitHub list ${url}`);
+    all.push(...(json as T[]));
+    const next = (response.headers.get("link") ?? "")
+      .match(/<([^>]+)>[^,]*?\brel="next"/);
+    url = next?.[1] ?? null;
   }
   return all;
 };
@@ -154,68 +118,56 @@ export const fetchCandidates = (giteaMajorMinorVersion: string) => {
   );
 };
 
-// returns a list of PRs that are merged and have the given label
-export const fetchMergedWithLabel = async (label: string) => {
-  const items = await fetchList<
-    {
-      title: string;
-      number: number;
-      pull_request?: { merged_at: string | null };
-    }
-  >(
-    `/repos/${TARGET_REPO}/issues?per_page=100&state=closed&labels=${
-      encodeURIComponent(label)
-    }`,
-  );
-  const merged = items.filter((item) => item.pull_request?.merged_at);
-  return { items: merged, total_count: merged.length };
+type ListIssue = {
+  number: number;
+  title: string;
+  updated_at: string;
+  user: { login: string };
+  labels: { name: string }[];
+  pull_request?: { merged_at: string | null };
 };
+
+const fetchIssuesByLabel = (
+  state: "open" | "closed",
+  label: string,
+  suffix = "",
+) =>
+  fetchList<ListIssue>(
+    `/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&labels=${
+      encodeURIComponent(label)
+    }${suffix}`,
+  );
+
+// returns a list of PRs that are merged and have the given label
+export const fetchMergedWithLabel = async (label: string) =>
+  (await fetchIssuesByLabel("closed", label))
+    .filter((item) => item.pull_request?.merged_at);
 
 // returns a list of open issues with the given label
-export const fetchOpenIssuesWithLabel = async (label: string) => {
-  const items = await fetchList<
-    { number: number; updated_at: string; pull_request?: unknown }
-  >(
-    `/repos/${TARGET_REPO}/issues?per_page=100&state=open&labels=${
-      encodeURIComponent(label)
-    }`,
-  );
-  const issuesOnly = items.filter((item) => !item.pull_request);
-  return { items: issuesOnly, total_count: issuesOnly.length };
-};
+export const fetchOpenIssuesWithLabel = async (label: string) =>
+  (await fetchIssuesByLabel("open", label))
+    .filter((item) => !item.pull_request);
 
 // returns a list of open PRs with the given label
-export const fetchOpenPrsWithLabel = async (label: string) => {
-  const items = await fetchList<PullRequest & { pull_request?: unknown }>(
-    `/repos/${TARGET_REPO}/issues?per_page=100&state=open&labels=${
-      encodeURIComponent(label)
-    }`,
-  );
-  const prs = items.filter((item) => item.pull_request);
-  return { items: prs as PullRequest[], total_count: prs.length };
-};
+export const fetchOpenPrsWithLabel = async (label: string) =>
+  (await fetchIssuesByLabel("open", label))
+    .filter((item) => item.pull_request);
 
 // returns a list of PRs pending merge (have the label reviewed/wait-merge)
-export const fetchPendingMerge = async () => {
-  const items = await fetchList<PullRequest & { pull_request?: unknown }>(
-    `/repos/${TARGET_REPO}/issues?per_page=100&state=open&labels=${
-      encodeURIComponent("reviewed/wait-merge")
-    }&sort=created&direction=asc`,
-  );
-  const prs = items.filter((item) => item.pull_request);
-  return { items: prs as PullRequest[], total_count: prs.length };
-};
+export const fetchPendingMerge = async () =>
+  (await fetchIssuesByLabel(
+    "open",
+    "reviewed/wait-merge",
+    "&sort=created&direction=asc",
+  )).filter((item) => item.pull_request);
 
-// returns a list of PRs that target the given branch
-export const fetchTargeting = async (
-  branch: string,
-): Promise<SearchResults<PullRequest>> => {
-  const items = await fetchList<PullRequest>(
-    `/repos/${TARGET_REPO}/pulls?per_page=100&state=all&base=${
+// returns a list of open PRs that target the given branch
+export const fetchTargeting = (branch: string): Promise<PullRequest[]> => {
+  return fetchList<PullRequest>(
+    `/repos/${TARGET_REPO}/pulls?per_page=100&state=open&base=${
       encodeURIComponent(branch)
     }`,
   );
-  return { items, total_count: items.length };
 };
 
 // returns a list of closed PRs that have the given milestone

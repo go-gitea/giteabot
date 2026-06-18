@@ -117,6 +117,16 @@ switch (eventName) {
   case "pull_request":
   case "pull_request_target": {
     await handlePullRequest(payload.action, payload.pull_request);
+    // fork/backport review approvals fire no event of their own, so reconcile
+    // lgtm on these frequent trusted events instead — recompute PRs touched in
+    // the last hour (the daily maintenance sweep is the backstop). Skip
+    // labeled/unlabeled: the bot's own lgtm label writes fire those and would
+    // re-trigger the reconcile.
+    const isLabelEvent = payload.action === "labeled" ||
+      payload.action === "unlabeled";
+    if (eventName === "pull_request_target" && !isLabelEvent) {
+      await runCheck("lgtm", () => lgtm.run(Date.now() - 1000 * 60 * 60));
+    }
     break;
   }
   case "pull_request_review": {

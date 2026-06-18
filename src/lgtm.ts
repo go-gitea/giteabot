@@ -102,13 +102,19 @@ export const getPrStatusAndLabel = (
   return { state, message, desiredLabel };
 };
 
-// recompute the lgtm status and label for every open PR carrying an lgtm/* label.
-// pull_request_review can't update fork PRs (their GITHUB_TOKEN is read-only), so
-// this maintenance sweep — run in a trusted context with a writable token — keeps
-// lgtm correct after approvals land on fork PRs without a coinciding event.
-export const run = async () => {
+// recompute the lgtm status/label for every open lgtm-labelled PR — or, with a
+// `since` epoch-ms cutoff, only those updated since then (a review bumps
+// updated_at, so a stale lgtm is always a recently-updated PR).
+export const run = async (since?: number) => {
+  // a failed label listing must not sink the whole sweep (it now runs on routine
+  // pull_request_target events) — skip it; the next run / maintenance retries
   const prLists = await Promise.all(
-    Object.values(lgtmLabels).map((label) => fetchOpenPrsWithLabel(label)),
+    Object.values(lgtmLabels).map((label) =>
+      fetchOpenPrsWithLabel(label).catch((error) => {
+        console.error(`lgtm sweep: listing ${label} failed:`, error);
+        return [];
+      })
+    ),
   );
   // a PR can surface under two tiers (the sweep advances it across tiers mid-run,
   // or GitHub's label index lags a recent change), so process each one once
@@ -116,6 +122,9 @@ export const run = async () => {
   for (const pr of prLists.flat()) {
     if (seen.has(pr.number)) continue;
     seen.add(pr.number);
+    if (since !== undefined && new Date(pr.updated_at).getTime() < since) {
+      continue;
+    }
     try {
       await setPrStatusAndLabel(await fetchPr(pr.number));
     } catch (error) {

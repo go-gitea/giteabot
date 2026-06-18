@@ -59,6 +59,7 @@ const runMaintenance = async () => {
   await runCheck("feedback", () => feedback.run());
   await runCheck("last_call", () => lastCall.run());
   await runCheck("milestones", () => milestones.run());
+  await runCheck("lgtm", () => lgtm.run());
 };
 
 const handlePullRequest = async (

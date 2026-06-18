@@ -7,7 +7,6 @@ import {
   setCommitStatus,
 } from "./github.ts";
 
-// the lgtm review-tier labels — the single definition reused across the bot
 export const lgtmLabels = {
   need2: "lgtm/need 2",
   need1: "lgtm/need 1",

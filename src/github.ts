@@ -79,8 +79,10 @@ const fetchWithRetry = async (
     }
     if (response.ok) return response;
 
-    const message = (await response.clone().text().catch(() => ""))
-      .toLowerCase();
+    // only 403 needs the body (rate-limit check); clone to keep it readable
+    const message = response.status === 403
+      ? (await response.clone().text().catch(() => "")).toLowerCase()
+      : "";
     const retryDelay = getRetryDelay(response, message);
     if (attempt >= FETCH_MAX_ATTEMPTS || retryDelay === null) return response;
     console.warn(

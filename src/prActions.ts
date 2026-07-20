@@ -28,13 +28,19 @@ export const updateBranch = async (
       return;
     }
 
-    const body = await response.json();
-    if (body.message !== "merge conflict between base and head") {
+    const text = await response.text().catch(() => "");
+    let body: { message?: string } | null = null;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      // non-JSON body, e.g. an HTML error page
+    }
+    if (body?.message !== "merge conflict between base and head") {
       console.error(
         `Failed to sync PR #${pr.number}`,
       );
-      console.error(JSON.stringify(body));
-      return Error(JSON.stringify(body?.message));
+      console.error(text);
+      return Error(body?.message ?? `HTTP ${response.status}`);
     }
 
     console.info(

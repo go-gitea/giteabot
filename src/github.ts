@@ -57,27 +57,74 @@ const getRetryDelay = (response: Response, message: string) => {
 
 const FETCH_MAX_ATTEMPTS = 5;
 
-const fetchJSON = async (url: string, label: string) => {
-  for (let attempt = 1; attempt <= FETCH_MAX_ATTEMPTS; attempt++) {
-    const response = await fetch(url, { headers: HEADERS });
-    const json = await response.json().catch(() => null);
-    if (response.ok && json !== null) return { response, json };
-
-    const message = typeof json?.message === "string"
-      ? json.message.toLowerCase()
-      : "";
-    const retryDelay = getRetryDelay(response, message);
-    if (attempt < FETCH_MAX_ATTEMPTS && retryDelay !== null) {
+// fetch that retries rate limits, server errors and network failures. Returns
+// the final response with an unread body — non-ok when the failure is not
+// retryable or retries are exhausted.
+const fetchWithRetry = async (
+  url: string,
+  label: string,
+  options: RequestInit = {},
+): Promise<Response> => {
+  for (let attempt = 1;; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(url, { headers: HEADERS, ...options });
+    } catch (error) {
+      if (attempt >= FETCH_MAX_ATTEMPTS) throw error;
       console.warn(
-        `${label} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
+        `${label} failed on attempt ${attempt}. Retrying in 1000ms.`,
       );
-      await sleep(retryDelay);
+      await sleep(1000);
       continue;
     }
+    if (response.ok) return response;
 
-    throw new Error(`${label} failed: ${JSON.stringify(json)}`);
+    const message = (await response.clone().text().catch(() => ""))
+      .toLowerCase();
+    const retryDelay = getRetryDelay(response, message);
+    if (attempt >= FETCH_MAX_ATTEMPTS || retryDelay === null) return response;
+    console.warn(
+      `${label} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
+    );
+    await sleep(retryDelay);
   }
-  throw new Error(`${label} exhausted retries`);
+};
+
+// parses a response body, throwing a descriptive error on non-ok responses
+// and non-JSON bodies (e.g. HTML error pages). Returns null for empty bodies.
+const parseJSON = async (response: Response, label: string) => {
+  const text = await response.text().catch(() => "");
+  if (!response.ok) {
+    throw new Error(
+      `${label} failed: ${response.status} ${text.slice(0, 300)}`,
+    );
+  }
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${label} returned invalid JSON: ${text.slice(0, 300)}`);
+  }
+};
+
+const fetchJSON = async (
+  url: string,
+  label: string,
+  options?: RequestInit,
+) => {
+  const response = await fetchWithRetry(url, label, options);
+  return { response, json: await parseJSON(response, label) };
+};
+
+// fires a mutating request whose result the caller doesn't need, logging
+// instead of throwing on failure so one failed write doesn't abort the run
+const mutate = async (url: string, label: string, options: RequestInit) => {
+  const response = await fetchWithRetry(url, label, options);
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    console.error(`${label} failed: ${response.status} ${text.slice(0, 300)}`);
+  }
+  return response.ok;
 };
 
 const fetchSearchResults = async <T>(
@@ -107,8 +154,8 @@ const fetchList = async <T>(path: string): Promise<T[]> => {
 
 // return the current user
 export const fetchCurrentUser = async () => {
-  const response = await fetch(`${GITHUB_API}/user`, { headers: HEADERS });
-  return response.json();
+  const { json } = await fetchJSON(`${GITHUB_API}/user`, "GitHub current user");
+  return json;
 };
 
 // returns a list of PRs that are merged and have the backport label for the current Gitea version
@@ -191,11 +238,10 @@ export const fetchPrFileNames = async (prNumber: number) => {
   const files: { filename: string }[] = [];
   let page = 1;
   while (true) {
-    const response = await fetch(
+    const { json } = await fetchJSON(
       `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}/files?per_page=100&page=${page}`,
-      { headers: HEADERS },
+      `GitHub files of PR #${prNumber}`,
     );
-    const json = await response.json();
     files.push(...json);
     if (json.length < 100) {
       break;
@@ -209,15 +255,14 @@ export const fetchPrFileNames = async (prNumber: number) => {
 // the base branch into the pull request branch
 export const updatePr = async (prNumber: number): Promise<Response> => {
   const pr = await fetchPr(prNumber);
-  const response = await fetch(
+  return fetchWithRetry(
     `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}/update-branch`,
+    `GitHub update branch of PR #${prNumber}`,
     {
       method: "PUT",
-      headers: HEADERS,
       body: JSON.stringify({ expected_head_sha: pr.head.sha }),
     },
   );
-  return response;
 };
 
 // sets a commit status
@@ -226,11 +271,11 @@ export const setCommitStatus = (
   state: "error" | "failure" | "pending" | "success",
   description: string,
 ) => {
-  return fetch(
+  return fetchWithRetry(
     `${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`,
+    `GitHub commit status of ${sha}`,
     {
       method: "POST",
-      headers: HEADERS,
       body: JSON.stringify({
         state,
         context: "giteabot/lgtm",
@@ -242,18 +287,19 @@ export const setCommitStatus = (
 
 // get a target repo branch
 export const fetchBranch = async (branch: string) => {
-  const response = await fetch(
+  const { json } = await fetchJSON(
     `${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`,
-    { headers: HEADERS },
+    `GitHub branch ${branch}`,
   );
-  return response.json();
+  return json;
 };
 
 // throws on non-404 (auth/rate-limit/5xx) — only 404 means "doesn't exist"
 export const branchExists = async (branch: string): Promise<boolean> => {
-  const response = await fetch(
+  const response = await fetchWithRetry(
     `${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`,
-    { headers: HEADERS, method: "HEAD" },
+    `GitHub branch ${branch}`,
+    { method: "HEAD" },
   );
   if (response.status === 404) return false;
   if (!response.ok) {
@@ -280,45 +326,39 @@ export const needsUpdate = async (prNumber: number) => {
 };
 
 // given a PR number that has the given label, remove the label
-export const removeLabel = async (
-  prNumber: number,
-  label: string,
-) => {
-  const response = await fetch(
+export const removeLabel = (prNumber: number, label: string) => {
+  return fetchWithRetry(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}/labels/${label}`,
-    { method: "DELETE", headers: HEADERS },
+    `GitHub remove label ${label} from #${prNumber}`,
+    { method: "DELETE" },
   );
-  return response;
 };
 
 // returns the PR
 export const fetchPr = async (prNumber: number) => {
-  const response = await fetch(
+  const { json } = await fetchJSON(
     `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`,
-    { headers: HEADERS },
+    `GitHub PR #${prNumber}`,
   );
-  return response.json();
+  return json;
 };
 
 // sets the milestone of the given PR
 export const setMilestone = (prNumber: number, milestone: number) => {
-  return fetch(
+  return fetchWithRetry(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}`,
-    {
-      method: "PATCH",
-      headers: HEADERS,
-      body: JSON.stringify({ milestone }),
-    },
+    `GitHub milestone of PR #${prNumber}`,
+    { method: "PATCH", body: JSON.stringify({ milestone }) },
   );
 };
 
 // removes the milestone of the given PR
 export const removeMilestone = (prNumber: number) => {
-  return fetch(`${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}`, {
-    method: "PATCH",
-    headers: HEADERS,
-    body: JSON.stringify({ milestone: null }),
-  });
+  return fetchWithRetry(
+    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}`,
+    `GitHub milestone of PR #${prNumber}`,
+    { method: "PATCH", body: JSON.stringify({ milestone: null }) },
+  );
 };
 
 // returns true if a backport PR exists for the given PR number and Gitea version
@@ -341,11 +381,13 @@ export const backportPrExists = async (
   }
 
   // also check if a branch that looks like the backport branch (getPrBranchName) exists
-  const response = await fetch(
-    `${GITHUB_API}/repos/${Deno.env.get("BACKPORTER_GITEA_FORK")}/branches/${
-      getPrBranchName(pr.number, giteaMajorMinorVersion)
-    }`,
-    { headers: HEADERS, method: "HEAD" },
+  const branchName = getPrBranchName(pr.number, giteaMajorMinorVersion);
+  const response = await fetchWithRetry(
+    `${GITHUB_API}/repos/${
+      Deno.env.get("BACKPORTER_GITEA_FORK")
+    }/branches/${branchName}`,
+    `GitHub backport branch ${branchName}`,
+    { method: "HEAD" },
   );
   if (response.ok) {
     backportPrExistsCache.add(cacheKey);
@@ -358,12 +400,10 @@ type Milestone = { title: string; number: number };
 
 // get Gitea milestones
 export const getMilestones = async (): Promise<Milestone[]> => {
-  const response = await fetch(
+  const { json } = await fetchJSON(
     `${GITHUB_API}/repos/${TARGET_REPO}/milestones`,
-    { headers: HEADERS },
+    "GitHub milestones",
   );
-  if (!response.ok) throw new Error(await response.text());
-  const json = await response.json();
   const milestones: Milestone[] = json.filter((m: Milestone) => valid(m.title));
 
   // take only the earliest patch version of each minor version (e.g. 1.19.0, 1.19.1, 1.19.2 -> 1.19.0)
@@ -397,12 +437,10 @@ export const getPrReviewers = async (
   }[] = [];
   let page = 1;
   while (true) {
-    const response = await fetch(
+    const { json: results } = await fetchJSON(
       `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${pr.number}/reviews?per_page=100&page=${page}`,
-      { headers: HEADERS },
+      `GitHub reviews of PR #${pr.number}`,
     );
-    if (!response.ok) throw new Error(await response.text());
-    const results: [] = await response.json();
     if (results.length === 0) break;
     reviews.push(...results);
     page++;
@@ -454,23 +492,25 @@ export const createBackportPr = async (
   if (originalPr.body) {
     prDescription += "\n\n" + originalPr.body;
   }
-  let response = await fetch(`${GITHUB_API}/repos/${TARGET_REPO}/pulls`, {
-    method: "POST",
-    headers: HEADERS,
-    body: JSON.stringify({
-      title: `${originalPr.title} (#${originalPr.number})`,
-      head: `${Deno.env.get("BACKPORTER_GITEA_FORK")?.split("/")[0]}:${
-        getPrBranchName(
-          originalPr.number,
-          giteaVersion.majorMinorVersion,
-        )
-      }`,
-      base: `release/v${giteaVersion.majorMinorVersion}`,
-      body: prDescription,
-      maintainer_can_modify: true,
-    }),
-  });
-  const json = await response.json();
+  const { json } = await fetchJSON(
+    `${GITHUB_API}/repos/${TARGET_REPO}/pulls`,
+    `GitHub create backport PR of #${originalPr.number}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        title: `${originalPr.title} (#${originalPr.number})`,
+        head: `${Deno.env.get("BACKPORTER_GITEA_FORK")?.split("/")[0]}:${
+          getPrBranchName(
+            originalPr.number,
+            giteaVersion.majorMinorVersion,
+          )
+        }`,
+        base: `release/v${giteaVersion.majorMinorVersion}`,
+        body: prDescription,
+        maintainer_can_modify: true,
+      }),
+    },
+  );
 
   // filter lgtm/*, backport/*, reviewed/*, size/*, and pr/* labels
   const labels = originalPr.labels
@@ -486,36 +526,28 @@ export const createBackportPr = async (
     });
 
   // add labels
-  response = await fetch(
+  await mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${json.number}/labels`,
-    {
-      method: "POST",
-      headers: HEADERS,
-      body: JSON.stringify({ labels }),
-    },
+    `GitHub labels of PR #${json.number}`,
+    { method: "POST", body: JSON.stringify({ labels }) },
   );
 
   // set assignee
-  await fetch(
+  await mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${json.number}`,
+    `GitHub assignee of PR #${json.number}`,
     {
       method: "PATCH",
-      headers: HEADERS,
-      body: JSON.stringify({
-        assignees: [originalPr.user.login],
-      }),
+      body: JSON.stringify({ assignees: [originalPr.user.login] }),
     },
   );
 
   // request review from original PR approvers
   const { approvers } = await getPrReviewers(originalPr);
-  await fetch(
+  await mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${json.number}/requested_reviewers`,
-    {
-      method: "POST",
-      headers: HEADERS,
-      body: JSON.stringify({ reviewers: [...approvers] }),
-    },
+    `GitHub reviewers of PR #${json.number}`,
+    { method: "POST", body: JSON.stringify({ reviewers: [...approvers] }) },
   );
 
   // if the original PR had exactly one backport/* label, add the backport/done label to it
@@ -528,28 +560,20 @@ export const createBackportPr = async (
 };
 
 export const addLabels = async (prNumber: number, labels: string[]) => {
-  const response = await fetch(
+  await mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}/labels`,
-    {
-      method: "POST",
-      headers: HEADERS,
-      body: JSON.stringify({ labels: labels }),
-    },
+    `GitHub add labels to #${prNumber}`,
+    { method: "POST", body: JSON.stringify({ labels }) },
   );
-  await response.json();
 };
 
 export const addComment = async (issueNumber: number, comment: string) => {
-  const response = await fetch(
+  const added = await mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}/comments`,
-    {
-      method: "POST",
-      headers: HEADERS,
-      body: JSON.stringify({ body: comment }),
-    },
+    `GitHub comment on #${issueNumber}`,
+    { method: "POST", body: JSON.stringify({ body: comment }) },
   );
-  await response.json();
-  console.info(`Added comment to #${issueNumber}`);
+  if (added) console.info(`Added comment to #${issueNumber}`);
 };
 
 // locks a given issue
@@ -557,22 +581,13 @@ export const lockIssue = async (
   issueNumber: number,
   reason: "off-topic" | "too heated" | "resolved" | "spam",
 ) => {
-  const response = await fetch(
+  const locked = await mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}/lock`,
-    {
-      method: "PUT",
-      headers: HEADERS,
-      body: JSON.stringify({ lock_reason: reason }),
-    },
+    `GitHub lock issue #${issueNumber}`,
+    { method: "PUT", body: JSON.stringify({ lock_reason: reason }) },
   );
-  if (!response.ok) {
-    console.error(
-      `Failed to lock issue #${issueNumber}: ${await response.text()}`,
-    );
-    return false;
-  }
-  console.info(`Locked issue #${issueNumber}`);
-  return true;
+  if (locked) console.info(`Locked issue #${issueNumber}`);
+  return locked;
 };
 
 // returns issues that are unlocked, closed and have been closed before the given date. Only the first 30 results are returned.
@@ -590,37 +605,28 @@ export const fetchClosedOldIssuesAndPRs = (before: Date) => {
 
 // returns the last comment of the given issue
 export const fetchLastComment = async (issueNumber: number) => {
-  const response = await fetch(
+  const { json } = await fetchJSON(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}/comments?per_page=1&sort=created&direction=desc`,
-    { headers: HEADERS },
+    `GitHub last comment of #${issueNumber}`,
   );
-  const json = await response.json();
   if (!json.length) return null;
   return json[0];
 };
 
 // closes the given issue
-export const closeIssue = async (issueNumber: number) => {
-  const response = await fetch(
+export const closeIssue = (issueNumber: number) => {
+  return mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}`,
-    {
-      method: "PATCH",
-      headers: HEADERS,
-      body: JSON.stringify({ state: "closed" }),
-    },
+    `GitHub close issue #${issueNumber}`,
+    { method: "PATCH", body: JSON.stringify({ state: "closed" }) },
   );
-  return response.json();
 };
 
 // closes the given PR
-export const closePr = async (prNumber: number) => {
-  const response = await fetch(
+export const closePr = (prNumber: number) => {
+  return mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`,
-    {
-      method: "PATCH",
-      headers: HEADERS,
-      body: JSON.stringify({ state: "closed" }),
-    },
+    `GitHub close PR #${prNumber}`,
+    { method: "PATCH", body: JSON.stringify({ state: "closed" }) },
   );
-  return response.json();
 };

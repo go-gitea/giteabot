@@ -1,4 +1,3 @@
-import { TARGET_REPO_GIT } from "./config.ts";
 import { cherryPickPr, getPrBranchName, initializeGitRepo } from "./git.ts";
 import { fetchGiteaVersions, GiteaVersion } from "./giteaVersion.ts";
 import {
@@ -80,7 +79,7 @@ const parseCandidate = async (candidate: Issue, giteaVersion: GiteaVersion) => {
       `I was unable to create a backport for ${giteaVersion.majorMinorVersion}. @${originalPr.user.login}, please send one manually. :tea:
 
 \`\`\`sh
-git fetch ${TARGET_REPO_GIT} release/v${giteaVersion.majorMinorVersion}
+git fetch origin release/v${giteaVersion.majorMinorVersion}
 git switch -c ${branch} FETCH_HEAD
 git cherry-pick ${originalPr.merge_commit_sha}  # fix conflicts, then git cherry-pick --continue
 \`\`\`

@@ -81,7 +81,8 @@ const parseCandidate = async (candidate: Issue, giteaVersion: GiteaVersion) => {
 \`\`\`sh
 git fetch origin release/v${giteaVersion.majorMinorVersion}
 git switch -c ${branch} FETCH_HEAD
-git cherry-pick ${originalPr.merge_commit_sha}  # fix conflicts, then git cherry-pick --continue
+git cherry-pick ${originalPr.merge_commit_sha}
+# fix conflicts, then git cherry-pick --continue
 \`\`\`
 `,
     );

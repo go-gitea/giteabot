@@ -1,6 +1,6 @@
 import { lt, parse, valid } from "@std/semver";
 import { getPrBranchName } from "./git.ts";
-import { GiteaVersion } from "./giteaVersion.ts";
+import { GiteaVersion, releaseVersion } from "./giteaVersion.ts";
 import { backportPrExistsCache } from "./state.ts";
 import { Issue, PullRequest } from "./types.ts";
 import { TARGET_REPO } from "./config.ts";
@@ -408,11 +408,10 @@ export const getMilestones = async (): Promise<Milestone[]> => {
   );
   const milestones: Milestone[] = json.filter((m: Milestone) => valid(m.title));
 
-  // take only the earliest patch version of each minor version (e.g. 1.19.0, 1.19.1, 1.19.2 -> 1.19.0)
+  // take only the earliest version of each release branch (e.g. 1.19.0, 1.19.1 -> 1.19.0 and 28.0.0, 28.1.0 -> 28.0.0)
   const earliestPatchVersions: Record<string, Milestone> = {};
   for (const milestone of milestones) {
-    const version = parse(milestone.title);
-    const key = `${version.major}.${version.minor}`;
+    const key = releaseVersion(parse(milestone.title));
     if (
       !earliestPatchVersions[key] ||
       lt(milestone.title, earliestPatchVersions[key].title)

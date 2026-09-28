@@ -17,12 +17,7 @@ export const assign = async (pr: { number: number; base: { ref: string } }) => {
   // Deno's semver library (gt function)
   if (!giteaVersion) {
     giteaVersion = giteaVersions.reduce((highest, version) => {
-      if (
-        SemVer.gt(
-          `${version.majorMinorVersion}.0`,
-          `${highest.majorMinorVersion}.0`,
-        )
-      ) {
+      if (SemVer.gt(version.semver, highest.semver)) {
         return version;
       }
       return highest;

@@ -1,13 +1,18 @@
-import { parse } from "@std/semver";
+import { parse, type SemVer } from "@std/semver";
 import { getMilestones } from "./github.ts";
+
+// 1.x has a release branch per minor version, semver releases (28+) per major version
+export const releaseVersion = ({ major, minor }: SemVer) =>
+  major > 1 ? `${major}` : `${major}.${minor}`;
 
 export class GiteaVersion {
   majorMinorVersion: string;
+  semver: SemVer;
   milestoneNumber: number;
 
   constructor(milestone: { title: string; number: number }) {
-    const semver = parse(milestone.title);
-    this.majorMinorVersion = `${semver.major}.${semver.minor}`;
+    this.semver = parse(milestone.title);
+    this.majorMinorVersion = releaseVersion(this.semver);
     this.milestoneNumber = milestone.number;
   }
 }

@@ -210,6 +210,13 @@ export const fetchPendingMerge = async () =>
     "&sort=created&direction=asc",
   )).filter((item) => item.pull_request);
 
+// returns a list of all open PRs
+export const fetchOpenPrs = (): Promise<PullRequest[]> => {
+  return fetchList<PullRequest>(
+    `/repos/${TARGET_REPO}/pulls?per_page=100&state=open`,
+  );
+};
+
 // returns a list of open PRs that target the given branch
 export const fetchTargeting = (branch: string): Promise<PullRequest[]> => {
   return fetchList<PullRequest>(

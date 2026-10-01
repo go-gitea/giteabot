@@ -13,11 +13,11 @@ on:
       - closed
       - review_requested
       - review_request_removed
-  pull_request_review:
+  workflow_run:
+    workflows:
+      - Gitea Backporter Review
     types:
-      - submitted
-      - edited
-      - dismissed
+      - requested
   schedule:
     - cron: "15 3 * * *"
   workflow_dispatch:
@@ -35,6 +35,7 @@ permissions:
 
 jobs:
   backporter:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request_review'
     runs-on: ubuntu-latest
     steps:
       - name: Run Gitea Backporter

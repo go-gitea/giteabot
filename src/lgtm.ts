@@ -1,5 +1,6 @@
 import {
   addLabels,
+  fetchOpenPrs,
   fetchOpenPrsWithLabel,
   fetchPr,
   getPrReviewers,
@@ -70,6 +71,15 @@ export const setPrStatusAndLabel = async (
       `Failed to set commit status in  "${pr.title}" (#${pr.number})`,
     );
     console.error(await response.text());
+  }
+};
+
+// set the lgtm status check and label of every open PR whose head is the given commit
+export const setPrStatusAndLabelBySha = async (sha: string) => {
+  for (const pr of await fetchOpenPrs()) {
+    if (pr.head.sha === sha) {
+      await setPrStatusAndLabel(await fetchPr(pr.number));
+    }
   }
 };
 

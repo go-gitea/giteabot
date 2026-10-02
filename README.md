@@ -110,8 +110,9 @@ on:
       review_requested,
       review_request_removed,
     ]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
+  workflow_run:
+    workflows: [Gitea Backporter Review]
+    types: [requested]
   schedule:
     - cron: "15 3 * * *"
   workflow_dispatch:
@@ -127,8 +128,30 @@ jobs:
           checks: all
 ```
 
-For a more complete example with permissions, see
-`examples/workflows/gitea-backporter.yml`.
+4. `pull_request_review` runs get a read-only token and no secrets on pull
+   requests from forks, so add a second workflow that only relays reviews to the
+   first one through `workflow_run`. Its job never runs, the requested run alone
+   triggers the relay. It must exist on every branch pull requests target,
+   because review runs use the workflow from the pull request's merge ref.
+
+```yaml
+name: Gitea Backporter Review
+
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+permissions: {}
+
+jobs:
+  relay:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
+```
+
+For a more complete example with permissions, see `examples/workflows`.
 
 The optional `checks` input controls which bot checks run in a workflow. It
 accepts `all`, `none`, or a comma-separated list from:

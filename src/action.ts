@@ -117,9 +117,9 @@ switch (eventName) {
   case "pull_request":
   case "pull_request_target": {
     await handlePullRequest(payload.action, payload.pull_request);
-    // fork/backport review approvals fire no event of their own, so reconcile
-    // lgtm on these frequent trusted events instead — recompute PRs touched in
-    // the last hour (the daily maintenance sweep is the backstop). Skip
+    // reviews the workflow_run relay misses, e.g. on conflicting PRs without a
+    // merge ref, get reconciled on these frequent trusted events: recompute PRs
+    // touched in the last hour (the daily maintenance sweep is the backstop). Skip
     // labeled/unlabeled: the bot's own lgtm label writes fire those and would
     // re-trigger the reconcile.
     const isLabelEvent = payload.action === "labeled" ||
@@ -133,6 +133,14 @@ switch (eventName) {
     await runCheck(
       "lgtm",
       () => lgtm.setPrStatusAndLabel(payload.pull_request),
+    );
+    break;
+  }
+  // pull_request_review gets a read-only token on fork PRs, so a review workflow triggers this writable run
+  case "workflow_run": {
+    await runCheck(
+      "lgtm",
+      () => lgtm.setPrStatusAndLabelBySha(payload.workflow_run.head_sha),
     );
     break;
   }

@@ -6,7 +6,7 @@ import {
   removeLabel,
 } from "./github.ts";
 import { fetchGiteaVersions } from "./giteaVersion.ts";
-import { debounce } from "@std/async";
+import { debounce } from "./debounce.ts";
 import type { PullRequest } from "./types.ts";
 
 // a relevant label is one that is used to control the merge queue,

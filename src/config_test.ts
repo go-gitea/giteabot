@@ -1,26 +1,26 @@
-import { assertEquals, assertThrows } from "@std/testing/asserts";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { AVAILABLE_CHECKS, parseEnabledChecks } from "./config.ts";
 
-Deno.test("parseEnabledChecks() enables all checks by default", () => {
-  assertEquals(parseEnabledChecks(undefined), new Set(AVAILABLE_CHECKS));
-  assertEquals(parseEnabledChecks("all"), new Set(AVAILABLE_CHECKS));
+test("parseEnabledChecks() enables all checks by default", () => {
+  assert.deepEqual(parseEnabledChecks(undefined), new Set(AVAILABLE_CHECKS));
+  assert.deepEqual(parseEnabledChecks("all"), new Set(AVAILABLE_CHECKS));
 });
 
-Deno.test("parseEnabledChecks() accepts comma and whitespace separated checks", () => {
-  assertEquals(
+test("parseEnabledChecks() accepts comma and whitespace separated checks", () => {
+  assert.deepEqual(
     parseEnabledChecks("labels, merge_queue\nlock"),
     new Set(["labels", "merge_queue", "lock"]),
   );
 });
 
-Deno.test("parseEnabledChecks() accepts none", () => {
-  assertEquals(parseEnabledChecks("none"), new Set());
+test("parseEnabledChecks() accepts none", () => {
+  assert.deepEqual(parseEnabledChecks("none"), new Set());
 });
 
-Deno.test("parseEnabledChecks() rejects unsupported checks", () => {
-  assertThrows(
+test("parseEnabledChecks() rejects unsupported checks", () => {
+  assert.throws(
     () => parseEnabledChecks("labels,unknown"),
-    Error,
-    "Unknown BACKPORTER_CHECKS value(s): unknown",
+    /Unknown BACKPORTER_CHECKS value\(s\): unknown/,
   );
 });

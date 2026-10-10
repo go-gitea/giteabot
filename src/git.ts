@@ -6,14 +6,12 @@ export const getPrBranchName = (
   giteaMajorMinorVersion: string,
 ) => `backport-${prNumber}-v${giteaMajorMinorVersion}`;
 
-const decoder = new TextDecoder();
-
 export const initializeGitRepo = async (user: string, email: string | null) => {
   await cmd.run("git", {
     args: [
       "clone",
-      `https://${Deno.env.get("BACKPORTER_GITHUB_TOKEN")}@github.com/${
-        Deno.env.get("BACKPORTER_GITEA_FORK")
+      `https://${process.env.BACKPORTER_GITHUB_TOKEN}@github.com/${
+        process.env.BACKPORTER_GITEA_FORK
       }.git`,
       "gitea",
     ],
@@ -80,9 +78,7 @@ export const cherryPickPr = async (
 
   if (!success) {
     console.error(
-      `Cherry-pick failed:\n${decoder.decode(stdout)}\n${
-        decoder.decode(stderr)
-      }`.trim(),
+      `Cherry-pick failed:\n${stdout}\n${stderr}`.trim(),
     );
     await cmd.run("git", {
       cwd: "gitea",

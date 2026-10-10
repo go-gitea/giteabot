@@ -1,5 +1,5 @@
-export const TARGET_REPO = Deno.env.get("BACKPORTER_REPO") ??
-  Deno.env.get("GITHUB_REPOSITORY") ??
+export const TARGET_REPO = process.env.BACKPORTER_REPO ??
+  process.env.GITHUB_REPOSITORY ??
   "go-gitea/gitea";
 
 export const TARGET_REPO_HTTP = `https://github.com/${TARGET_REPO}`;

@@ -1,5 +1,5 @@
 import { addComment, needsUpdate, removeLabel, updatePr } from "./github.ts";
-import { debounce } from "@std/async";
+import { debounce } from "./debounce.ts";
 
 const execute = async (
   label: string,

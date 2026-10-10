@@ -22,8 +22,8 @@ const initializeBackporter = async () => {
   if (!initializing) {
     initializing = (async () => {
       if (
-        !Deno.env.get("BACKPORTER_GITEA_FORK") ||
-        !Deno.env.get("BACKPORTER_GITHUB_TOKEN")
+        !process.env.BACKPORTER_GITEA_FORK ||
+        !process.env.BACKPORTER_GITHUB_TOKEN
       ) {
         console.error(
           "BACKPORTER_GITEA_FORK and BACKPORTER_GITHUB_TOKEN must be set",

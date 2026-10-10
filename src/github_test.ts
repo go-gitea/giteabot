@@ -1,4 +1,5 @@
-import { assertEquals, assertFalse, assertRejects } from "@std/testing/asserts";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   backportPrExists,
   fetchBranch,
@@ -9,7 +10,7 @@ import {
   getPrReviewers,
 } from "./github.ts";
 
-Deno.test("fetchCandidates() retries GitHub search failures", async () => {
+test("fetchCandidates() retries GitHub search failures", async () => {
   const originalFetch = globalThis.fetch;
   let attempts = 0;
   globalThis.fetch = (() => {
@@ -47,15 +48,15 @@ Deno.test("fetchCandidates() retries GitHub search failures", async () => {
 
   try {
     const result = await fetchCandidates("1.26");
-    assertEquals(attempts, 2);
-    assertEquals(result.items.length, 1);
-    assertEquals(result.items[0].number, 123);
+    assert.deepEqual(attempts, 2);
+    assert.deepEqual(result.items.length, 1);
+    assert.deepEqual(result.items[0].number, 123);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-Deno.test("fetchCandidates() throws the GitHub API error payload", async () => {
+test("fetchCandidates() throws the GitHub API error payload", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (() => {
     return Promise.resolve(
@@ -72,17 +73,16 @@ Deno.test("fetchCandidates() throws the GitHub API error payload", async () => {
   }) as typeof fetch;
 
   try {
-    await assertRejects(
+    await assert.rejects(
       () => fetchCandidates("1.26"),
-      Error,
-      "Bad credentials",
+      /Bad credentials/,
     );
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-Deno.test("getPrReviewers() returns the appropriate approvers", async () => {
+test("getPrReviewers() returns the appropriate approvers", async () => {
   const prToApproversAndBlockers = {
     8346: { // note lafriks and guillep2k are requested reviewers so they don't count as approvers nor blockers
       approvers: new Set([
@@ -131,43 +131,43 @@ Deno.test("getPrReviewers() returns the appropriate approvers", async () => {
       async ([prNumber, approversAndBlockers]) => {
         const pr = await fetchPr(Number(prNumber));
         const result = await getPrReviewers(pr);
-        assertEquals(result.approvers, approversAndBlockers.approvers);
-        assertEquals(result.blockers, approversAndBlockers.blockers);
+        assert.deepEqual(result.approvers, approversAndBlockers.approvers);
+        assert.deepEqual(result.blockers, approversAndBlockers.blockers);
       },
     ),
   );
 });
 
-Deno.test('fetchBranch("main") returns the appropriate main branch', async () => {
+test('fetchBranch("main") returns the appropriate main branch', async () => {
   const mainBranch = await fetchBranch("main");
-  assertEquals(mainBranch.name, "main");
-  assertEquals(mainBranch.protected, true);
-  assertEquals(
+  assert.deepEqual(mainBranch.name, "main");
+  assert.deepEqual(mainBranch.protected, true);
+  assert.deepEqual(
     mainBranch._links.html,
     "https://github.com/go-gitea/gitea/tree/main",
   );
 });
 
-Deno.test("fetchBranch() handles full ref name well", async () => {
+test("fetchBranch() handles full ref name well", async () => {
   const [mainBranch, releaseV119Branch] = await Promise.all([
     fetchBranch("refs/heads/main"),
     fetchBranch("refs/heads/release/v1.19"),
   ]);
-  assertEquals(mainBranch.name, "main");
-  assertEquals(mainBranch.protected, true);
-  assertEquals(
+  assert.deepEqual(mainBranch.name, "main");
+  assert.deepEqual(mainBranch.protected, true);
+  assert.deepEqual(
     mainBranch._links.html,
     "https://github.com/go-gitea/gitea/tree/main",
   );
-  assertEquals(releaseV119Branch.name, "release/v1.19");
-  assertEquals(releaseV119Branch.protected, true);
-  assertEquals(
+  assert.deepEqual(releaseV119Branch.name, "release/v1.19");
+  assert.deepEqual(releaseV119Branch.protected, true);
+  assert.deepEqual(
     releaseV119Branch._links.html,
     "https://github.com/go-gitea/gitea/tree/release/v1.19",
   );
 });
 
-Deno.test("fetchPrFileNames() returns the appropriate files", async () => {
+test("fetchPrFileNames() returns the appropriate files", async () => {
   const prToFiles = {
     25432: new Set([
       "modules/setting/database.go",
@@ -183,18 +183,18 @@ Deno.test("fetchPrFileNames() returns the appropriate files", async () => {
     Object.entries(prToFiles).map(
       async ([prNumber, files]) => {
         const result = await fetchPrFileNames(Number(prNumber));
-        assertEquals(result, files);
+        assert.deepEqual(result, files);
       },
     ),
   );
 });
 
-Deno.test("fetchPrFileNames() can handle big PRs", async () => {
+test("fetchPrFileNames() can handle big PRs", async () => {
   const aPrWith669Files = await fetchPrFileNames(24147);
-  assertEquals(aPrWith669Files.size, 669);
+  assert.deepEqual(aPrWith669Files.size, 669);
 });
 
-Deno.test("fetchLastComment() returns the appropriate comment", async () => {
+test("fetchLastComment() returns the appropriate comment", async () => {
   const prToLastComment = {
     10: "Closing as fixed by #199 ",
     29: null,
@@ -206,14 +206,14 @@ Deno.test("fetchLastComment() returns the appropriate comment", async () => {
     Object.entries(prToLastComment).map(
       async ([issueNumber, comment]) => {
         const result = await fetchLastComment(Number(issueNumber));
-        if (!comment) return assertFalse(result);
-        assertEquals(result.body, comment);
+        if (!comment) return assert.ok(!result);
+        assert.deepEqual(result.body, comment);
       },
     ),
   );
 });
 
-Deno.test("backportPrExists() returns the appropriate result", async () => {
+test("backportPrExists() returns the appropriate result", async () => {
   const prAndVersionToBackportExists = {
     "30511_1.22": true,
     "30511_1.21": true,
@@ -227,7 +227,7 @@ Deno.test("backportPrExists() returns the appropriate result", async () => {
           { number: Number(prNumber) },
           version,
         );
-        assertEquals(result, backportExists);
+        assert.deepEqual(result, backportExists);
       },
     ),
   );

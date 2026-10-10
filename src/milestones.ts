@@ -1,4 +1,4 @@
-import * as SemVer from "@std/semver";
+import * as SemVer from "semver";
 import { fetchGiteaVersions } from "./giteaVersion.ts";
 import * as github from "./github.ts";
 
@@ -14,7 +14,7 @@ export const assign = async (pr: { number: number; base: { ref: string } }) => {
 
   // if no gitea version is found, the PR is targeting the main branch. We
   // will use the gitea version with the highest major and minor version using
-  // Deno's semver library (gt function)
+  // the semver library (gt function)
   if (!giteaVersion) {
     giteaVersion = giteaVersions.reduce((highest, version) => {
       if (SemVer.gt(version.semver, highest.semver)) {

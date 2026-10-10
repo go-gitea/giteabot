@@ -1,17 +1,18 @@
-SRC_FILES := $(shell find src -type f -name '*.ts')
+node_modules: package-lock.json
+	@npm ci --no-fund --no-audit
+	@touch node_modules
 
 @PHONY: lint
-lint:
-	@deno lint --quiet
-	@deno fmt --quiet --check
-	@deno check --quiet $(SRC_FILES)
+lint: node_modules
+	@npx eslint .
+	@npx tsc
 
 @PHONY: fmt
-fmt:
-	@deno fmt --quiet
+fmt: node_modules
+	@npx eslint --fix .
 
 @PHONY: test
-test:
+test: node_modules
 	@BACKPORTER_GITHUB_TOKEN="$${BACKPORTER_GITHUB_TOKEN:-$$(gh auth token 2>/dev/null)}" \
 	BACKPORTER_GITEA_FORK="$${BACKPORTER_GITEA_FORK:-GiteaBot/gitea}" \
-	deno test --quiet -A
+	node --test 'src/**/*_test.ts'

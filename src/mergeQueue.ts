@@ -1,6 +1,6 @@
 import { fetchPendingMerge, removeLabel } from "./github.ts";
 import * as prActions from "./prActions.ts";
-import { debounce } from "@std/async";
+import { debounce } from "./debounce.ts";
 
 const updateBranch = async () => {
   // update all PRs pending merge (only if they need an update)

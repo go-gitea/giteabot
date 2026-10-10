@@ -1,9 +1,11 @@
-image:
-  file: .gitpod.Dockerfile
+image: gitpod/workspace-node-lts
+
+tasks:
+  - init: npm ci
 
 vscode:
   extensions:
-    - denoland.vscode-deno
+    - dbaeumer.vscode-eslint
 
 github:
   prebuilds:

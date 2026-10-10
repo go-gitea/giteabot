@@ -1,7 +1,8 @@
-import { assertEquals } from "@std/testing/asserts";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { assign } from "./milestones.ts";
 
-Deno.test("assign() maps release/v1.27 to 1.27, release/v28 to the earliest 28.x and main to the highest milestone", async () => {
+test("assign() maps release/v1.27 to 1.27, release/v28 to the earliest 28.x and main to the highest milestone", async () => {
   const originalFetch = globalThis.fetch;
   const assigned: number[] = [];
   globalThis.fetch = ((_url: string, options?: RequestInit) => {
@@ -21,7 +22,7 @@ Deno.test("assign() maps release/v1.27 to 1.27, release/v28 to the earliest 28.x
     for (const ref of ["release/v1.27", "release/v28", "main"]) {
       await assign({ number: 1, base: { ref } });
     }
-    assertEquals(assigned, [1, 3, 4]);
+    assert.deepEqual(assigned, [1, 3, 4]);
   } finally {
     globalThis.fetch = originalFetch;
   }

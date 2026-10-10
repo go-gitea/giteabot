@@ -179,8 +179,10 @@ For example, to run only label cleanup and milestone maintenance:
 
 ## Development
 
-- `make fmt` runs the formatter
-- `make lint` runs the linter and checks formatting and types
+Requires Node.js 24 or newer, which runs the TypeScript sources directly.
+
+- `make fmt` fixes lint issues where possible
+- `make lint` runs the linter and checks types
 - `make test` runs the tests
 
 ## Contributing

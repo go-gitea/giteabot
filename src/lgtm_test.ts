@@ -1,7 +1,8 @@
-import { assertEquals } from "@std/testing/asserts";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { run } from "./lgtm.ts";
 
-Deno.test("run() recomputes a PR once when it surfaces under two label queries", async () => {
+test("run() recomputes a PR once when it surfaces under two label queries", async () => {
   const originalFetch = globalThis.fetch;
   const json = (data: unknown) =>
     Promise.resolve(
@@ -38,14 +39,14 @@ Deno.test("run() recomputes a PR once when it surfaces under two label queries",
 
   try {
     await run();
-    assertEquals(prFetches, 1); // deduped across the two label queries
-    assertEquals(statusWrites, 1); // status recomputed and written once
+    assert.deepEqual(prFetches, 1); // deduped across the two label queries
+    assert.deepEqual(statusWrites, 1); // status recomputed and written once
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-Deno.test("run(since) skips PRs older than the cutoff, processes newer ones", async () => {
+test("run(since) skips PRs older than the cutoff, processes newer ones", async () => {
   const originalFetch = globalThis.fetch;
   const json = (data: unknown) =>
     Promise.resolve(
@@ -83,9 +84,9 @@ Deno.test("run(since) skips PRs older than the cutoff, processes newer ones", as
 
   try {
     await run(Date.now()); // PR last touched in 2000 is older than the cutoff
-    assertEquals(prFetches, 0);
+    assert.deepEqual(prFetches, 0);
     await run(0); // epoch cutoff admits every PR
-    assertEquals(prFetches, 1);
+    assert.deepEqual(prFetches, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }

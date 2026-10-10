@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import * as backport from "./backport.ts";
 import * as labels from "./labels.ts";
 import * as mergeQueue from "./mergeQueue.ts";
@@ -12,20 +13,20 @@ import { type CheckName, parseEnabledChecks } from "./config.ts";
 
 let enabledChecks: Set<CheckName>;
 try {
-  enabledChecks = parseEnabledChecks(Deno.env.get("BACKPORTER_CHECKS"));
+  enabledChecks = parseEnabledChecks(process.env.BACKPORTER_CHECKS);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 const requiredEnv = [
   "BACKPORTER_GITHUB_TOKEN",
   ...(enabledChecks.has("backport") ? ["BACKPORTER_GITEA_FORK"] : []),
 ];
-const missingEnv = requiredEnv.filter((name) => !Deno.env.get(name));
+const missingEnv = requiredEnv.filter((name) => !process.env[name]);
 if (missingEnv.length > 0) {
   console.error(`Missing required env vars: ${missingEnv.join(", ")}`);
-  Deno.exit(1);
+  process.exit(1);
 }
 
 const shouldRunCheck = (checkName: CheckName) => enabledChecks.has(checkName);
@@ -41,15 +42,15 @@ const runCheck = async (
   await callback();
 };
 
-const eventName = Deno.env.get("GITHUB_EVENT_NAME");
-const eventPath = Deno.env.get("GITHUB_EVENT_PATH");
+const eventName = process.env.GITHUB_EVENT_NAME;
+const eventPath = process.env.GITHUB_EVENT_PATH;
 
 if (!eventName || !eventPath) {
   console.error("GITHUB_EVENT_NAME and GITHUB_EVENT_PATH must be set");
-  Deno.exit(1);
+  process.exit(1);
 }
 
-const payloadText = await Deno.readTextFile(eventPath);
+const payloadText = await readFile(eventPath, "utf8");
 const payload = JSON.parse(payloadText);
 
 const runMaintenance = async () => {

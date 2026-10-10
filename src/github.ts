@@ -1,14 +1,14 @@
-import { lt, parse, valid } from "@std/semver";
+import { lt, parse, valid } from "semver";
 import { getPrBranchName } from "./git.ts";
 import { GiteaVersion, releaseVersion } from "./giteaVersion.ts";
 import { backportPrExistsCache } from "./state.ts";
-import { Issue, PullRequest } from "./types.ts";
+import type { Issue, PullRequest } from "./types.ts";
 import { TARGET_REPO } from "./config.ts";
 
 const GITHUB_API = "https://api.github.com";
 const HEADERS = {
   "Content-Type": "application/json",
-  Authorization: `Bearer ${Deno.env.get("BACKPORTER_GITHUB_TOKEN")}`,
+  Authorization: `Bearer ${process.env.BACKPORTER_GITHUB_TOKEN}`,
 };
 
 type SearchResults<T> = {
@@ -393,7 +393,7 @@ export const backportPrExists = async (
   const branchName = getPrBranchName(pr.number, giteaMajorMinorVersion);
   const response = await fetchWithRetry(
     `${GITHUB_API}/repos/${
-      Deno.env.get("BACKPORTER_GITEA_FORK")
+      process.env.BACKPORTER_GITEA_FORK
     }/branches/${branchName}`,
     `GitHub backport branch ${branchName}`,
     { method: "HEAD" },
@@ -418,7 +418,7 @@ export const getMilestones = async (): Promise<Milestone[]> => {
   // take only the earliest version of each release branch (e.g. 1.19.0, 1.19.1 -> 1.19.0 and 28.0.0, 28.1.0 -> 28.0.0)
   const earliestPatchVersions: Record<string, Milestone> = {};
   for (const milestone of milestones) {
-    const key = releaseVersion(parse(milestone.title));
+    const key = releaseVersion(parse(milestone.title)!);
     if (
       !earliestPatchVersions[key] ||
       lt(milestone.title, earliestPatchVersions[key].title)
@@ -507,7 +507,7 @@ export const createBackportPr = async (
       method: "POST",
       body: JSON.stringify({
         title: `${originalPr.title} (#${originalPr.number})`,
-        head: `${Deno.env.get("BACKPORTER_GITEA_FORK")?.split("/")[0]}:${
+        head: `${process.env.BACKPORTER_GITEA_FORK?.split("/")[0]}:${
           getPrBranchName(
             originalPr.number,
             giteaVersion.majorMinorVersion,

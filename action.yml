@@ -15,10 +15,13 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Setup Deno
-      uses: denoland/setup-deno@11b63cf76cfcafb4e43f97b6cad24d8e8438f62d # v1.5.2
+    - name: Setup Node
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        deno-version: v1.x
+        node-version: 24
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --omit=dev --no-fund --no-audit --prefix "${{ github.action_path }}"
     - name: Run backporter
       shell: bash
       env:
@@ -26,4 +29,4 @@ runs:
         BACKPORTER_GITEA_FORK: ${{ inputs.gitea_fork }}
         BACKPORTER_CHECKS: ${{ inputs.checks }}
       run: |
-        deno run --allow-env --allow-net --allow-run --allow-read --allow-write --allow-sys ${{ github.action_path }}/src/action.ts
+        node "${{ github.action_path }}/src/action.ts"

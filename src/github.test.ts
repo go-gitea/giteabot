@@ -66,6 +66,40 @@ test('getPrReviewers() returns the appropriate approvers', async () => {
   }));
 });
 
+test('getPrReviewers() lifts the block of a reviewer who re-requested their own review', async () => {
+  const fetchMock = vi.fn((url: string) => {
+    if (url.includes('/reviews')) {
+      return Promise.resolve(Response.json([
+        {state: 'CHANGES_REQUESTED', user: {login: 'alice'}},
+        {state: 'CHANGES_REQUESTED', user: {login: 'bob'}},
+        {state: 'CHANGES_REQUESTED', user: {login: 'carol'}},
+      ]));
+    }
+    if (url.includes('/timeline')) {
+      return Promise.resolve(Response.json([
+        {event: 'review_requested', requested_reviewer: {login: 'alice'}, review_requester: {login: 'author'}},
+        {event: 'review_requested', requested_reviewer: {login: 'alice'}, review_requester: {login: 'alice'}},
+        {event: 'review_requested', requested_reviewer: {login: 'bob'}, review_requester: {login: 'bob'}},
+        {event: 'review_requested', requested_reviewer: {login: 'bob'}, review_requester: {login: 'author'}},
+      ]));
+    }
+    return Promise.resolve(Response.json({}));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    // alice's last request came from alice, bob's from the author, carol was not re-requested
+    const result = await getPrReviewers({number: 1, requested_reviewers: [{login: 'alice'}, {login: 'bob'}]});
+    expect(result.blockers).toEqual(new Set(['bob', 'carol']));
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes('/timeline'))).toHaveLength(1);
+
+    // without requested blockers the timeline is not fetched
+    await getPrReviewers({number: 1, requested_reviewers: []});
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes('/timeline'))).toHaveLength(1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 test('fetchBranch("main") returns the appropriate main branch', async () => {
   const mainBranch = await fetchBranch('main');
   expect(mainBranch.name).toEqual('main');

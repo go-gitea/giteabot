@@ -6,25 +6,25 @@ import {
   getPrReviewers,
   removeLabel,
   setCommitStatus,
-} from "./github.ts";
+} from './github.ts';
 
 export const lgtmLabels = {
-  need2: "lgtm/need 2",
-  need1: "lgtm/need 1",
-  done: "lgtm/done",
-  blocked: "lgtm/blocked",
+  need2: 'lgtm/need 2',
+  need1: 'lgtm/need 1',
+  done: 'lgtm/done',
+  blocked: 'lgtm/blocked',
 };
 
 // given a pr number, set its lgtm status check and lgtm label
-export const setPrStatusAndLabel = async (
+export async function setPrStatusAndLabel(
   pr: {
-    labels: { name: string }[];
-    head: { sha: string };
+    labels: {name: string}[];
+    head: {sha: string};
     title: string;
     number: number;
-    requested_reviewers: { login: string }[];
+    requested_reviewers: {login: string}[];
   },
-) => {
+) {
   let reviewers;
   try {
     reviewers = await getPrReviewers(pr);
@@ -33,8 +33,8 @@ export const setPrStatusAndLabel = async (
     return;
   }
 
-  const { state, message, desiredLabel } = getPrStatusAndLabel(reviewers);
-  const currentLgtmLabels = pr.labels.filter((l) => l.name.startsWith("lgtm/"));
+  const {state, message, desiredLabel} = getPrStatusAndLabel(reviewers);
+  const currentLgtmLabels = pr.labels.filter((l) => l.name.startsWith('lgtm/'));
 
   // remove any undesired lgtm labels
   await Promise.all(
@@ -56,7 +56,7 @@ export const setPrStatusAndLabel = async (
   );
 
   // add desired label if it's not there
-  if (!currentLgtmLabels.some((label) => label.name === desiredLabel)) {
+  if (currentLgtmLabels.every((label) => label.name !== desiredLabel)) {
     await addLabels(pr.number, [desiredLabel]);
   }
 
@@ -72,59 +72,61 @@ export const setPrStatusAndLabel = async (
     );
     console.error(await response.text());
   }
-};
+}
 
 // set the lgtm status check and label of every open PR whose head is the given commit
-export const setPrStatusAndLabelBySha = async (sha: string) => {
+export async function setPrStatusAndLabelBySha(sha: string) {
   for (const pr of await fetchOpenPrs()) {
     if (pr.head.sha === sha) {
       await setPrStatusAndLabel(await fetchPr(pr.number));
     }
   }
-};
+}
 
 // returns the status, message, and label for a given number of approvals
-export const getPrStatusAndLabel = (
-  reviewers: { approvers: Set<string>; blockers: Set<string> },
-) => {
+export function getPrStatusAndLabel(
+  reviewers: {approvers: Set<string>; blockers: Set<string>},
+) {
   let desiredLabel = lgtmLabels.need2;
-  let message = "Needs two more approvals";
-  let state: "pending" | "success" | "failure" = "pending";
+  let message = 'Needs two more approvals';
+  let state: 'pending' | 'success' | 'failure' = 'pending';
 
   if (reviewers.blockers.size > 0) {
     desiredLabel = lgtmLabels.blocked;
-    message = "Blocked by " + Array.from(reviewers.blockers).join(", ");
-    state = "failure";
-    return { state, message, desiredLabel };
+    message = `Blocked by ${Array.from(reviewers.blockers).join(', ')}`;
+    state = 'failure';
+    return {state, message, desiredLabel};
   }
 
   if (reviewers.approvers.size === 1) {
     desiredLabel = lgtmLabels.need1;
-    message = "Needs one more approval";
+    message = 'Needs one more approval';
   }
 
   if (reviewers.approvers.size >= 2) {
     desiredLabel = lgtmLabels.done;
     message = `Approved by ${reviewers.approvers.size} people`;
-    state = "success";
+    state = 'success';
   }
 
-  return { state, message, desiredLabel };
-};
+  return {state, message, desiredLabel};
+}
 
 // recompute the lgtm status/label for every open lgtm-labelled PR — or, with a
 // `since` epoch-ms cutoff, only those updated since then (a review bumps
 // updated_at, so a stale lgtm is always a recently-updated PR).
-export const run = async (since?: number) => {
+export async function run(since?: number) {
   // a failed label listing must not sink the whole sweep (it now runs on routine
   // pull_request_target events) — skip it; the next run / maintenance retries
   const prLists = await Promise.all(
-    Object.values(lgtmLabels).map((label) =>
-      fetchOpenPrsWithLabel(label).catch((error) => {
+    Object.values(lgtmLabels).map(async (label) => {
+      try {
+        return await fetchOpenPrsWithLabel(label);
+      } catch (error) {
         console.error(`lgtm sweep: listing ${label} failed:`, error);
         return [];
-      })
-    ),
+      }
+    }),
   );
   // a PR can surface under two tiers (the sweep advances it across tiers mid-run,
   // or GitHub's label index lags a recent change), so process each one once
@@ -141,4 +143,4 @@ export const run = async (since?: number) => {
       console.error(`lgtm sweep failed for #${pr.number}:`, error);
     }
   }
-};
+}

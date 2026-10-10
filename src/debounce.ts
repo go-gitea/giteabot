@@ -1,9 +1,9 @@
 // delays calling fn until wait ms have passed since the last call, using the
 // arguments of the last call
-export const debounce = <T extends unknown[]>(
+export function debounce<T extends unknown[]>(
   fn: (...args: T) => unknown,
   wait: number,
-) => {
+) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   return (...args: T) => {
     clearTimeout(timeout);
@@ -12,4 +12,4 @@ export const debounce = <T extends unknown[]>(
       fn(...args);
     }, wait);
   };
-};
+}

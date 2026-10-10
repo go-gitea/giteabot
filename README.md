@@ -179,10 +179,11 @@ For example, to run only label cleanup and milestone maintenance:
 
 ## Development
 
-Requires Node.js 24 or newer, which runs the TypeScript sources directly.
+Requires Node.js 22.18 or newer, which runs the TypeScript sources directly,
+and [pnpm](https://pnpm.io).
 
-- `make fmt` fixes lint issues where possible
 - `make lint` runs the linter and checks types
+- `make lint-fix` fixes lint issues where possible
 - `make test` runs the tests
 
 ## Contributing

@@ -1060,7 +1060,6 @@ export default defineConfig([
     },
   },
   {
-    // RequestInit is a fetch type that @types/node declares globally
-    languageOptions: {globals: {...globals.nodeBuiltin, RequestInit: 'readonly'}},
+    languageOptions: {globals: globals.nodeBuiltin},
   },
 ]);

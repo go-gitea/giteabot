@@ -21,7 +21,7 @@ export async function setPrStatusAndLabel(pr: {
   head: {sha: string};
   title: string;
   number: number;
-  requested_reviewers: {login: string}[];
+  requested_reviewers?: {login: string}[] | null;
 }) {
   let reviewers;
   try {
@@ -35,19 +35,7 @@ export async function setPrStatusAndLabel(pr: {
   const currentLgtmLabels = pr.labels.filter((l) => l.name.startsWith('lgtm/'));
 
   // remove any undesired lgtm labels
-  await Promise.all(
-    currentLgtmLabels
-      .filter((l) => l.name !== desiredLabel)
-      .map(async (label) => {
-        const response = await removeLabel(pr.number, label.name);
-        if (response.ok) {
-          console.info(`Removed ${label.name} from "${pr.title}" (#${pr.number})`);
-        } else {
-          console.error(`Failed to remove ${label.name} from "${pr.title}" (#${pr.number})`);
-          console.error(await response.text());
-        }
-      }),
-  );
+  await Promise.all(currentLgtmLabels.filter((l) => l.name !== desiredLabel).map((label) => removeLabel(pr.number, label.name)));
 
   // add desired label if it's not there
   if (currentLgtmLabels.every((label) => label.name !== desiredLabel)) {
@@ -55,12 +43,8 @@ export async function setPrStatusAndLabel(pr: {
   }
 
   // set commit status
-  const response = await setCommitStatus(pr.head.sha, state, message);
-  if (response.ok) {
+  if (await setCommitStatus(pr.head.sha, state, message)) {
     console.info(`Set commit status in "${pr.title}" (#${pr.number})`);
-  } else {
-    console.error(`Failed to set commit status in  "${pr.title}" (#${pr.number})`);
-    console.error(await response.text());
   }
 }
 

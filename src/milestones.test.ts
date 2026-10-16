@@ -1,10 +1,10 @@
 import {assignMilestone} from './milestones.ts';
 
-test('assignMilestone() maps release/v1.27 to 1.27, release/v28 to the earliest 28.x and main to the highest milestone', async () => {
+test('assignMilestone() maps release/v1.27 to 1.27, release/v28 to the earliest 28.x, main to the highest milestone and skips unknown branches', async () => {
   const assigned: number[] = [];
-  vi.stubGlobal('fetch', (_url: string, {method, body}: RequestInit) => {
+  vi.stubGlobal('fetch', (_url: string, {method, body}: {method?: string; body: string}) => {
     if (method === 'PATCH') {
-      assigned.push(JSON.parse(body as string).milestone);
+      assigned.push(JSON.parse(body).milestone);
       return Promise.resolve(Response.json({}));
     }
     return Promise.resolve(Response.json([
@@ -14,7 +14,7 @@ test('assignMilestone() maps release/v1.27 to 1.27, release/v28 to the earliest 
       {title: '29.0.0', number: 4},
     ]));
   });
-  for (const ref of ['release/v1.27', 'release/v28', 'main']) {
+  for (const ref of ['release/v1.27', 'release/v28', 'main', 'release/v1.26']) {
     await assignMilestone({number: 1, base: {ref}});
   }
   expect(assigned).toEqual([1, 3, 4]);

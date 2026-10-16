@@ -26,14 +26,18 @@ if (missingEnv.length > 0) {
   process.exit(1);
 }
 
-const shouldRunCheck = (checkName: CheckName) => enabledChecks.has(checkName);
-
+// a failed check fails the run without skipping the checks after it
 async function runCheck(checkName: CheckName, callback: () => unknown) {
-  if (!shouldRunCheck(checkName)) {
+  if (!enabledChecks.has(checkName)) {
     console.info(`Skipping ${checkName} check`);
     return;
   }
-  await callback();
+  try {
+    await callback();
+  } catch (error) {
+    console.error(`${checkName} check failed:`, error);
+    process.exitCode = 1;
+  }
 }
 
 const eventName = process.env.GITHUB_EVENT_NAME;
@@ -48,32 +52,32 @@ const payloadText = await readFile(eventPath, 'utf8');
 const payload = JSON.parse(payloadText);
 
 async function runMaintenance() {
-  await runCheck('labels', () => maintainLabels());
-  await runCheck('merge_queue', () => updateMergeQueue());
-  await runCheck('lock', () => lockOldIssues());
-  await runCheck('feedback', () => closeStaleFeedbackIssues());
-  await runCheck('last_call', () => handleLastCallPrs());
-  await runCheck('milestones', () => removeMilestonesFromUnmergedClosedPrs());
-  await runCheck('lgtm', () => sweepLgtmPrs());
+  await runCheck('labels', maintainLabels);
+  await runCheck('merge_queue', updateMergeQueue);
+  await runCheck('lock', lockOldIssues);
+  await runCheck('feedback', closeStaleFeedbackIssues);
+  await runCheck('last_call', handleLastCallPrs);
+  await runCheck('milestones', removeMilestonesFromUnmergedClosedPrs);
+  await runCheck('lgtm', sweepLgtmPrs);
 }
 
 async function handlePullRequest(action: string, pr: typeof payload.pull_request) {
   if (action === 'labeled' || action === 'unlabeled') {
     const labelName = payload.label?.name;
     if (labelName && isRelevantLabel(labelName)) {
-      await runCheck('labels', () => maintainLabels());
-      await runCheck('merge_queue', () => updateMergeQueue());
+      await runCheck('labels', maintainLabels);
+      await runCheck('merge_queue', updateMergeQueue);
       await runCheck('pr_actions', () => executePrAction(labelName, pr));
     }
     return;
   }
 
   if (action === 'opened') {
-    await runCheck('labels', () => maintainLabels());
-    if (pr?.base?.ref === 'main') {
+    await runCheck('labels', maintainLabels);
+    if (pr.base.ref === 'main') {
       await runCheck('translation_comment', () => commentIfTranslationsChanged(pr));
     }
-    if (pr?.base?.ref?.startsWith('release/')) {
+    if (pr.base.ref.startsWith('release/')) {
       await runCheck('milestones', () => assignMilestone(pr));
     }
   }
@@ -86,17 +90,17 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
   ) {
     await runCheck('lgtm', () => setPrStatusAndLabel(pr));
   } else if (action === 'closed') {
-    if (pr?.merged && !pr?.milestone && shouldRunCheck('milestones')) {
-      await assignMilestone(pr);
+    if (pr.merged && !pr.milestone) {
+      await runCheck('milestones', () => assignMilestone(pr));
     }
-    await runCheck('milestones', () => removeMilestonesFromUnmergedClosedPrs());
+    await runCheck('milestones', removeMilestonesFromUnmergedClosedPrs);
   }
 }
 
 switch (eventName) {
   case 'push': {
-    if (payload.ref === 'refs/heads/main' && shouldRunCheck('backport')) {
-      await createBackports();
+    if (payload.ref === 'refs/heads/main') {
+      await runCheck('backport', createBackports);
     }
     await runMaintenance();
     break;

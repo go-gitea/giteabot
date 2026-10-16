@@ -1,5 +1,4 @@
 .env
-gitea/
 node_modules/
 
 # used for local testing

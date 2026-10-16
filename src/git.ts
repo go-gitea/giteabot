@@ -1,85 +1,51 @@
+import {mkdtemp} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {runCommand} from './cmd.ts';
 import {TARGET_REPO_GIT} from './config.ts';
 
 export const getPrBranchName = (prNumber: number, giteaMajorMinorVersion: string) =>
   `backport-${prNumber}-v${giteaMajorMinorVersion}`;
 
-export async function initializeGitRepo(user: string, email: string | null) {
-  await runCommand('git', {
-    args: [
-      'clone',
-      `https://${process.env.BACKPORTER_GITHUB_TOKEN}@github.com/${process.env.BACKPORTER_GITEA_FORK}.git`,
-      'gitea',
-    ],
-  });
-  await runCommand('git', {
-    cwd: 'gitea',
-    args: ['remote', 'add', 'upstream', TARGET_REPO_GIT],
-  });
+let repoDir = '';
 
-  // set the user name and email
-  await runCommand('git', {
-    cwd: 'gitea',
-    args: ['config', 'user.name', user],
-  });
-  // the email might be null if the token doesn't have the user scope,
-  // see https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-the-authenticated-user
-  if (!email) {
-    email = 'teabot@gitea.io';
-  }
-  await runCommand('git', {
-    cwd: 'gitea',
-    args: ['config', 'user.email', email],
-  });
+async function git(args: string[]) {
+  const result = await runCommand('git', {args, cwd: repoDir});
+  if (!result.success) throw new Error(`git ${args[0]} failed:\n${result.stderr}`);
 }
 
-export async function cherryPickPr(
-  commitHash: string,
-  prNumber: number,
-  giteaMajorMinorVersion: string,
-): Promise<boolean> {
+export async function initializeGitRepo(user: string, email: string | null) {
+  repoDir = await mkdtemp(join(tmpdir(), 'giteabot-'));
+  await git(['clone', `https://${process.env.BACKPORTER_GITHUB_TOKEN}@github.com/${process.env.BACKPORTER_GITEA_FORK}.git`, '.']);
+  await git(['remote', 'add', 'upstream', TARGET_REPO_GIT]);
+
+  // set the user name and email
+  await git(['config', 'user.name', user]);
+  // the email might be null if the token doesn't have the user scope,
+  // see https://docs.github.com/en/rest/users/users?apiVersion=2022-11-28#get-the-authenticated-user
+  await git(['config', 'user.email', email ?? 'teabot@gitea.io']);
+}
+
+export async function cherryPickPr(commitHash: string, prNumber: number, giteaMajorMinorVersion: string) {
   // fetch the upstream main branch
-  await runCommand('git', {
-    cwd: 'gitea',
-    args: ['fetch', 'upstream', 'main'],
-  });
+  await git(['fetch', 'upstream', 'main']);
 
   // fetch the upstream release branch
-  await runCommand('git', {
-    cwd: 'gitea',
-    args: ['fetch', 'upstream', `release/v${giteaMajorMinorVersion}`],
-  });
+  await git(['fetch', 'upstream', `release/v${giteaMajorMinorVersion}`]);
 
   // create the backport branch from the upstream release branch
-  await runCommand('git', {
-    cwd: 'gitea',
-    args: [
-      'checkout',
-      `upstream/release/v${giteaMajorMinorVersion}`,
-      '-b',
-      getPrBranchName(prNumber, giteaMajorMinorVersion),
-    ],
-  });
+  const branch = getPrBranchName(prNumber, giteaMajorMinorVersion);
+  await git(['checkout', `upstream/release/v${giteaMajorMinorVersion}`, '-b', branch]);
 
   // cherry-pick the PR
-  const {success, stdout, stderr} = await runCommand('git', {
-    cwd: 'gitea',
-    args: ['cherry-pick', commitHash],
-  });
-
+  const {success, stdout, stderr} = await runCommand('git', {cwd: repoDir, args: ['cherry-pick', commitHash]});
   if (!success) {
     console.error(`Cherry-pick failed:\n${stdout}\n${stderr}`.trim());
-    await runCommand('git', {
-      cwd: 'gitea',
-      args: ['cherry-pick', '--abort'],
-    });
+    await runCommand('git', {cwd: repoDir, args: ['cherry-pick', '--abort']});
     return false;
   }
 
   // push the branch to the fork
-  await runCommand('git', {
-    cwd: 'gitea',
-    args: ['push', 'origin', getPrBranchName(prNumber, giteaMajorMinorVersion)],
-  });
+  await git(['push', 'origin', branch]);
   return true;
 }

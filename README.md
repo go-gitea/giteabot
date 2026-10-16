@@ -180,7 +180,7 @@ For example, to run only label cleanup and milestone maintenance:
 ## Development
 
 Requires Node.js 22.18 or newer, which runs the TypeScript sources directly,
-and [pnpm](https://pnpm.io).
+and [pnpm](https://pnpm.io) 12 or newer.
 
 - `make lint` runs the linter and checks types
 - `make lint-fix` fixes lint issues where possible

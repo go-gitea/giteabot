@@ -1,8 +1,7 @@
 import {addComment, fetchPrFileNames} from './github.ts';
 
 export async function commentIfTranslationsChanged(pr: {number: number; user: {login: string}}) {
-  const prFileNames = Array.from(await fetchPrFileNames(pr.number));
-  const translationsChanged = prFileNames.some((fileName) =>
+  const translationsChanged = (await fetchPrFileNames(pr.number)).values().some((fileName) =>
     fileName.startsWith('options/locale/') &&
     (fileName.endsWith('.ini') || fileName.endsWith('.json')) &&
     !fileName.endsWith('en-US.ini') && !fileName.endsWith('en-US.json'),

@@ -2,10 +2,10 @@ import {
   backportPrExists,
   fetchBranch,
   fetchCandidates,
-  fetchLastComment,
   fetchPr,
   fetchPrFileNames,
   getPrReviewers,
+  hasCommentsSince,
 } from './github.ts';
 
 test('fetchCandidates() retries GitHub search failures', async () => {
@@ -108,18 +108,11 @@ test('fetchPrFileNames() can handle big PRs', async () => {
   expect(aPrWith669Files.size).toEqual(669);
 });
 
-test('fetchLastComment() returns the appropriate comment', async () => {
-  const prToLastComment = {
-    10: 'Closing as fixed by #199 ',
-    29: null,
-    1000: 'LGTM',
-    10000: 'It is a feature of SQL databases. The repo id is stored in the database and uses auto increment:\r\nhttps://www.w3schools.com/sql/sql_autoincrement.asp',
-  };
-  await Promise.all(Object.entries(prToLastComment).map(async ([issueNumber, comment]) => {
-    const result = await fetchLastComment(Number(issueNumber));
-    if (!comment) return expect(result).toBeFalsy();
-    expect(result.body).toEqual(comment);
-  }));
+test('hasCommentsSince() only counts comments created after the given date', async () => {
+  expect(await hasCommentsSince(1000, new Date('2017-02-21T14:30:00Z'))).toEqual(true);
+  expect(await hasCommentsSince(10, new Date('2017-01-01T00:00:00Z'))).toEqual(false);
+  expect(await hasCommentsSince(29, new Date(0))).toEqual(false);
+  expect(await hasCommentsSince(24147, new Date('2023-04-18T16:57:30Z'))).toEqual(false);
 });
 
 test('backportPrExists() returns the appropriate result', async () => {

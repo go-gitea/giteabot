@@ -13,16 +13,16 @@ import {type CheckName, parseEnabledChecks} from './config.ts';
 
 let enabledChecks: Set<CheckName>;
 try {
-  enabledChecks = parseEnabledChecks(process.env.BACKPORTER_CHECKS);
+  enabledChecks = parseEnabledChecks(process.env.INPUT_CHECKS);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 }
 
-const requiredEnv = ['BACKPORTER_GITHUB_TOKEN', ...(enabledChecks.has('backport') ? ['BACKPORTER_GITEA_FORK'] : [])];
-const missingEnv = requiredEnv.filter((name) => !process.env[name]);
-if (missingEnv.length > 0) {
-  console.error(`Missing required env vars: ${missingEnv.join(', ')}`);
+const requiredInputs = ['github_token', ...(enabledChecks.has('backport') ? ['gitea_fork'] : [])];
+const missingInputs = requiredInputs.filter((name) => !process.env[`INPUT_${name.toUpperCase()}`]);
+if (missingInputs.length > 0) {
+  console.error(`Missing required inputs: ${missingInputs.join(', ')}`);
   process.exit(1);
 }
 

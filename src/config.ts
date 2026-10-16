@@ -35,7 +35,7 @@ export function parseEnabledChecks(checks: string | undefined): Set<CheckName> {
 
   if (invalidChecks.length > 0) {
     throw new Error(
-      `Unknown BACKPORTER_CHECKS value(s): ${invalidChecks.join(', ')}. Supported values: all, none, ${AVAILABLE_CHECKS.join(', ')}`,
+      `Unknown checks value(s): ${invalidChecks.join(', ')}. Supported values: all, none, ${AVAILABLE_CHECKS.join(', ')}`,
     );
   }
 

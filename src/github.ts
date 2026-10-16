@@ -1,15 +1,15 @@
 import {setTimeout as sleep} from 'node:timers/promises';
-import {lt, parse, type SemVer} from 'semver';
 import {getPrBranchName} from './git.ts';
 import type {GiteaVersion} from './giteaVersion.ts';
 import {backportPrExistsCache} from './state.ts';
 import type {Branch, Issue, PullRequest, User} from './types.ts';
 import {TARGET_REPO} from './config.ts';
+import {compareVersions, parseVersion, releaseVersion, type Version} from './version.ts';
 
 const GITHUB_API = 'https://api.github.com';
 const HEADERS = {
   'Content-Type': 'application/json',
-  Authorization: `Bearer ${process.env.BACKPORTER_GITHUB_TOKEN}`,
+  Authorization: `Bearer ${process.env.INPUT_GITHUB_TOKEN}`,
 };
 
 type RequestOptions = {method: string; body?: string};
@@ -18,9 +18,6 @@ type SearchResults<T> = {
   items: T[];
   total_count: number;
 };
-
-// 1.x has a release branch per minor version, semver releases (28+) per major version
-export const releaseVersion = ({major, minor}: SemVer) => major > 1 ? String(major) : `${major}.${minor}`;
 
 export async function readText(response: Response) {
   try {
@@ -307,7 +304,7 @@ export async function backportPrExists(pr: {number: number}, giteaMajorMinorVers
   // also check if a branch that looks like the backport branch (getPrBranchName) exists
   const branchName = getPrBranchName(pr.number, giteaMajorMinorVersion);
   const response = await fetchWithRetry(
-    `${GITHUB_API}/repos/${process.env.BACKPORTER_GITEA_FORK}/branches/${branchName}`,
+    `${GITHUB_API}/repos/${process.env.INPUT_GITEA_FORK}/branches/${branchName}`,
     `GitHub backport branch ${branchName}`,
     {method: 'HEAD'},
   );
@@ -323,13 +320,13 @@ type Milestone = {title: string; number: number};
 // get Gitea milestones
 export async function getMilestones() {
   // take only the earliest version of each release branch (e.g. 1.19.0, 1.19.1 -> 1.19.0 and 28.0.0, 28.1.0 -> 28.0.0)
-  const earliestPatchVersions: Record<string, Milestone> = {};
+  const earliestPatchVersions: Record<string, Milestone & {version: Version}> = {};
   for (const milestone of await fetchList<Milestone>(`/repos/${TARGET_REPO}/milestones?per_page=100`)) {
-    const semver = parse(milestone.title);
-    if (!semver) continue;
-    const key = releaseVersion(semver);
-    if (!earliestPatchVersions[key] || lt(semver, earliestPatchVersions[key].title)) {
-      earliestPatchVersions[key] = milestone;
+    const version = parseVersion(milestone.title);
+    if (!version) continue;
+    const key = releaseVersion(version);
+    if (!earliestPatchVersions[key] || compareVersions(version, earliestPatchVersions[key].version) < 0) {
+      earliestPatchVersions[key] = {...milestone, version};
     }
   }
   return Object.values(earliestPatchVersions);
@@ -387,7 +384,7 @@ export async function createBackportPr(originalPr: PullRequest, giteaVersion: Gi
       method: 'POST',
       body: JSON.stringify({
         title: `${originalPr.title} (#${originalPr.number})`,
-        head: `${process.env.BACKPORTER_GITEA_FORK!.split('/')[0]}:${getPrBranchName(originalPr.number, giteaVersion.majorMinorVersion)}`,
+        head: `${process.env.INPUT_GITEA_FORK!.split('/')[0]}:${getPrBranchName(originalPr.number, giteaVersion.majorMinorVersion)}`,
         base: `release/v${giteaVersion.majorMinorVersion}`,
         body: prDescription,
         maintainer_can_modify: true,

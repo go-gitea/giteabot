@@ -185,6 +185,7 @@ and [pnpm](https://pnpm.io) 12 or newer.
 - `make lint` runs the linter and checks types
 - `make lint-fix` fixes lint issues where possible
 - `make test` runs the tests
+- `make build` bundles the action into `dist/index.js`, which is committed
 
 ## Contributing
 

@@ -9,7 +9,7 @@
 - Comments: write almost none, short and preferably same-line, explaining why for a future reader. Never narrate code, the change or the prompt. Preserve existing ones that still apply. If you need to write a paragraph-long comment, rethink your implementation, it is likely too complicated
 - In TS, use `!` instead of `?.`/`??` when a value always exists
 - Write sizes as multiplications like `64 * 1024`, not bit shifts like `64 << 10`
-- Lint what changed with `make lint`
+- Lint what changed with `make lint`, and after `src` changes run `make build` and commit `dist/index.js`
 - Fix the cause rather than disabling a linter or weakening a test. Where unavoidable, use the narrowest scope with a trailing comment giving the reason
 - Run single tests with `pnpm exec vitest <path-filter>`
 - Write the fewest, fastest tests covering the behavior, extending an existing one where possible. Prefer unit tests where logic is testable in isolation

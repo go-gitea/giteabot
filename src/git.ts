@@ -16,7 +16,7 @@ async function git(args: string[]) {
 
 export async function initializeGitRepo(user: string, email: string | null) {
   repoDir = await mkdtemp(join(tmpdir(), 'giteabot-'));
-  await git(['clone', `https://${process.env.BACKPORTER_GITHUB_TOKEN}@github.com/${process.env.BACKPORTER_GITEA_FORK}.git`, '.']);
+  await git(['clone', `https://${process.env.INPUT_GITHUB_TOKEN}@github.com/${process.env.INPUT_GITEA_FORK}.git`, '.']);
   await git(['remote', 'add', 'upstream', TARGET_REPO_GIT]);
 
   // set the user name and email

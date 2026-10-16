@@ -1,6 +1,6 @@
-import {rcompare} from 'semver';
 import {fetchGiteaVersions} from './giteaVersion.ts';
 import {fetchUnmergedClosedWithMilestone, getMilestones, setMilestone} from './github.ts';
+import {compareVersions} from './version.ts';
 
 // given a PR number, set the milestone of the PR according to its base branch
 export async function assignMilestone(pr: {number: number; base: {ref: string}}) {
@@ -8,7 +8,7 @@ export async function assignMilestone(pr: {number: number; base: {ref: string}})
 
   // main gets the highest gitea version, a release branch the version matching it
   const giteaVersion = pr.base.ref === 'main' ?
-    giteaVersions.toSorted((a, b) => rcompare(a.semver, b.semver))[0] :
+    giteaVersions.toSorted((a, b) => compareVersions(b.version, a.version))[0] :
     giteaVersions.find((version) => pr.base.ref === `release/v${version.majorMinorVersion}`);
   if (!giteaVersion) {
     console.info(`No milestone matches ${pr.base.ref} for PR #${pr.number}`);

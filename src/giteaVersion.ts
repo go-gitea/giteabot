@@ -1,14 +1,14 @@
-import {SemVer} from 'semver';
-import {getMilestones, releaseVersion} from './github.ts';
+import {getMilestones} from './github.ts';
+import {releaseVersion, type Version} from './version.ts';
 
 export class GiteaVersion {
   majorMinorVersion: string;
-  semver: SemVer;
+  version: Version;
   milestoneNumber: number;
 
-  constructor(milestone: {title: string; number: number}) {
-    this.semver = new SemVer(milestone.title);
-    this.majorMinorVersion = releaseVersion(this.semver);
+  constructor(milestone: {number: number; version: Version}) {
+    this.version = milestone.version;
+    this.majorMinorVersion = releaseVersion(milestone.version);
     this.milestoneNumber = milestone.number;
   }
 }

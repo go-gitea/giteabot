@@ -14,5 +14,5 @@ test('parseEnabledChecks() accepts none', () => {
 });
 
 test('parseEnabledChecks() rejects unsupported checks', () => {
-  expect(() => parseEnabledChecks('labels,unknown')).toThrow(/Unknown BACKPORTER_CHECKS value\(s\): unknown/);
+  expect(() => parseEnabledChecks('labels,unknown')).toThrow(/Unknown checks value\(s\): unknown/);
 });

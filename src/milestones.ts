@@ -1,9 +1,9 @@
 import {gt} from 'semver';
 import {fetchGiteaVersions} from './giteaVersion.ts';
-import * as github from './github.ts';
+import {fetchUnmergedClosedWithMilestone, getMilestones, removeMilestone, setMilestone} from './github.ts';
 
 // given a PR number, set the milestone of the PR according to its base branch
-export async function assign(pr: {number: number; base: {ref: string}}) {
+export async function assignMilestone(pr: {number: number; base: {ref: string}}) {
   // fetch the current gitea versions
   const giteaVersions = await fetchGiteaVersions();
 
@@ -22,7 +22,7 @@ export async function assign(pr: {number: number; base: {ref: string}}) {
     }
   }
 
-  const response = await github.setMilestone(pr.number, giteaVersion.milestoneNumber);
+  const response = await setMilestone(pr.number, giteaVersion.milestoneNumber);
   if (!response.ok) {
     console.error(`Failed to set milestone ${giteaVersion.majorMinorVersion} for PR #${pr.number}`);
     console.error(await response.text());
@@ -31,21 +31,17 @@ export async function assign(pr: {number: number; base: {ref: string}}) {
   console.info(`Set milestone ${giteaVersion.majorMinorVersion} for PR #${pr.number}`);
 }
 
-export async function run() {
-  await removeMilestonesFromUnmergedClosedPrs();
-}
-
 // removes milestones from all PRs that are closed and unmerged
-async function removeMilestonesFromUnmergedClosedPrs() {
+export async function removeMilestonesFromUnmergedClosedPrs() {
   // get the current open milestones
-  const milestones = await github.getMilestones();
+  const milestones = await getMilestones();
 
   // for each milestone, fetch the PRs that are closed and included in the milestone
   // and remove the milestone each PR
   return Promise.all(milestones.map(async (m) => {
-    const prs = await github.fetchUnmergedClosedWithMilestone(m.title);
+    const prs = await fetchUnmergedClosedWithMilestone(m.title);
     return Promise.all(prs.items.map(async (pr) => {
-      const response = await github.removeMilestone(pr.number);
+      const response = await removeMilestone(pr.number);
       if (!response.ok) {
         console.error(`Failed to remove milestone from closed PR #${pr.number}`);
         console.error(await response.text());

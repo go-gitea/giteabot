@@ -3,7 +3,7 @@ import {addComment, fetchClosedOldIssuesAndPRs, fetchLastComment, lockIssue} fro
 const MILLISECONDS_IN_A_DAY = 1000 * 60 * 60 * 24;
 
 // adds a comment and locks old issues and PRs
-export async function run() {
+export async function lockOldIssues() {
   const twoWeeksAgo = new Date(Date.now() - MILLISECONDS_IN_A_DAY * 14);
   const threeMonthsAgo = new Date(Date.now() - MILLISECONDS_IN_A_DAY * 90);
   const issues = await fetchClosedOldIssuesAndPRs(threeMonthsAgo);

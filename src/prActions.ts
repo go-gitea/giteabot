@@ -1,6 +1,6 @@
 import {addComment, needsUpdate, readText, removeLabel, updatePr} from './github.ts';
 
-export async function run(label: string, pr: {number: number; user: {login: string}}) {
+export async function executePrAction(label: string, pr: {number: number; user: {login: string}}) {
   if (label === 'giteabot/update-branch') {
     const err = await updateBranch(pr);
     if (err) {

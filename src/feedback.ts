@@ -1,6 +1,6 @@
 import {addComment, closeIssue, fetchOpenIssuesWithLabel} from './github.ts';
 
-export async function run() {
+export async function closeStaleFeedbackIssues() {
   // get all issues with the label "status/needs-feedback"
   const issues = await fetchOpenIssuesWithLabel('issue/needs-feedback');
   return Promise.all(issues.map(handleIssue));

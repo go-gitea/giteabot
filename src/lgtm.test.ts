@@ -1,4 +1,4 @@
-import {run} from './lgtm.ts';
+import {sweepLgtmPrs} from './lgtm.ts';
 
 const json = (data: unknown) => Promise.resolve(Response.json(data));
 
@@ -17,16 +17,16 @@ function stubGitHub(listIssues: (url: string) => unknown[]) {
   return calls;
 }
 
-test('run() recomputes a PR once when it surfaces under two label queries', async () => {
+test('sweepLgtmPrs() recomputes a PR once when it surfaces under two label queries', async () => {
   const calls = stubGitHub((url) => url.includes('need%202') || url.includes('lgtm%2Fdone') ? [{number: 1, pull_request: {}}] : []);
-  await run();
+  await sweepLgtmPrs();
   expect(calls).toEqual({prFetches: 1, statusWrites: 1});
 });
 
-test('run(since) skips PRs older than the cutoff, processes newer ones', async () => {
+test('sweepLgtmPrs(since) skips PRs older than the cutoff, processes newer ones', async () => {
   const calls = stubGitHub((url) => url.includes('need%202') ? [{number: 1, pull_request: {}, updated_at: '2000-01-01T00:00:00Z'}] : []);
-  await run(Date.now());
+  await sweepLgtmPrs(Date.now());
   expect(calls.prFetches).toEqual(0);
-  await run(0);
+  await sweepLgtmPrs(0);
   expect(calls.prFetches).toEqual(1);
 });

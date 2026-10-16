@@ -35,7 +35,7 @@ async function initializeBackporter() {
   await initializing;
 }
 
-export async function run() {
+export async function createBackports() {
   await initializeBackporter();
   const versions = await fetchGiteaVersions();
   // skip the in-development next-minor milestone (no release branch yet)

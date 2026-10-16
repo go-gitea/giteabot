@@ -2,7 +2,7 @@ import {TARGET_REPO_HTTP} from './config.ts';
 import {addComment, addLabels, closePr, fetchOpenPrsWithLabel} from './github.ts';
 import {lgtmLabels} from './lgtm.ts';
 
-export async function run() {
+export async function handleLastCallPrs() {
   // get all PRs with the label "pr/last-call"
   const prs = await fetchOpenPrsWithLabel('pr/last-call');
   return Promise.all(prs.map(handlePr));

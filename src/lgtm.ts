@@ -103,7 +103,7 @@ export function getPrStatusAndLabel(reviewers: {approvers: Set<string>; blockers
 // recompute the lgtm status/label for every open lgtm-labelled PR — or, with a
 // `since` epoch-ms cutoff, only those updated since then (a review bumps
 // updated_at, so a stale lgtm is always a recently-updated PR).
-export async function run(since?: number) {
+export async function sweepLgtmPrs(since?: number) {
   // a failed label listing must not sink the whole sweep (it now runs on routine
   // pull_request_target events) — skip it; the next run / maintenance retries
   const prLists = await Promise.all(

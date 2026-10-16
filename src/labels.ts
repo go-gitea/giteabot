@@ -9,7 +9,7 @@ export function isRelevantLabel(label: string): boolean {
   return label.startsWith('reviewed/') || label.startsWith('backport/') || label.startsWith('giteabot/');
 }
 
-export async function run() {
+export async function maintainLabels() {
   const labelsToRemoveAfterMerge = ['reviewed/wait-merge', 'reviewed/prioritize-merge', 'pr/last-call'];
   await Promise.all([
     removeLabelsFromMergedPr(labelsToRemoveAfterMerge),

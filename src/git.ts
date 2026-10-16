@@ -1,24 +1,24 @@
-import * as cmd from './cmd.ts';
+import {runCommand} from './cmd.ts';
 import {TARGET_REPO_GIT} from './config.ts';
 
 export const getPrBranchName = (prNumber: number, giteaMajorMinorVersion: string) =>
   `backport-${prNumber}-v${giteaMajorMinorVersion}`;
 
 export async function initializeGitRepo(user: string, email: string | null) {
-  await cmd.run('git', {
+  await runCommand('git', {
     args: [
       'clone',
       `https://${process.env.BACKPORTER_GITHUB_TOKEN}@github.com/${process.env.BACKPORTER_GITEA_FORK}.git`,
       'gitea',
     ],
   });
-  await cmd.run('git', {
+  await runCommand('git', {
     cwd: 'gitea',
     args: ['remote', 'add', 'upstream', TARGET_REPO_GIT],
   });
 
   // set the user name and email
-  await cmd.run('git', {
+  await runCommand('git', {
     cwd: 'gitea',
     args: ['config', 'user.name', user],
   });
@@ -27,7 +27,7 @@ export async function initializeGitRepo(user: string, email: string | null) {
   if (!email) {
     email = 'teabot@gitea.io';
   }
-  await cmd.run('git', {
+  await runCommand('git', {
     cwd: 'gitea',
     args: ['config', 'user.email', email],
   });
@@ -39,19 +39,19 @@ export async function cherryPickPr(
   giteaMajorMinorVersion: string,
 ): Promise<boolean> {
   // fetch the upstream main branch
-  await cmd.run('git', {
+  await runCommand('git', {
     cwd: 'gitea',
     args: ['fetch', 'upstream', 'main'],
   });
 
   // fetch the upstream release branch
-  await cmd.run('git', {
+  await runCommand('git', {
     cwd: 'gitea',
     args: ['fetch', 'upstream', `release/v${giteaMajorMinorVersion}`],
   });
 
   // create the backport branch from the upstream release branch
-  await cmd.run('git', {
+  await runCommand('git', {
     cwd: 'gitea',
     args: [
       'checkout',
@@ -62,14 +62,14 @@ export async function cherryPickPr(
   });
 
   // cherry-pick the PR
-  const {success, stdout, stderr} = await cmd.run('git', {
+  const {success, stdout, stderr} = await runCommand('git', {
     cwd: 'gitea',
     args: ['cherry-pick', commitHash],
   });
 
   if (!success) {
     console.error(`Cherry-pick failed:\n${stdout}\n${stderr}`.trim());
-    await cmd.run('git', {
+    await runCommand('git', {
       cwd: 'gitea',
       args: ['cherry-pick', '--abort'],
     });
@@ -77,7 +77,7 @@ export async function cherryPickPr(
   }
 
   // push the branch to the fork
-  await cmd.run('git', {
+  await runCommand('git', {
     cwd: 'gitea',
     args: ['push', 'origin', getPrBranchName(prNumber, giteaMajorMinorVersion)],
   });

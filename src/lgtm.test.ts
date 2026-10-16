@@ -1,91 +1,32 @@
 import {run} from './lgtm.ts';
 
-test('run() recomputes a PR once when it surfaces under two label queries', async () => {
-  const originalFetch = globalThis.fetch;
-  const json = (data: unknown) =>
-    Promise.resolve(
-      Response.json(data, {
-        headers: {'Content-Type': 'application/json'},
-      }),
-    );
-  let prFetches = 0;
-  let statusWrites = 0;
-  globalThis.fetch = ((input: string | URL | Request) => {
-    const url = input instanceof Request ? input.url : input.toString();
+const json = (data: unknown) => Promise.resolve(Response.json(data));
+
+function stubGitHub(listIssues: (url: string) => unknown[]) {
+  const calls = {prFetches: 0, statusWrites: 0};
+  vi.stubGlobal('fetch', (url: string) => {
     if (url.includes('/pulls/1/reviews')) return json([]);
     if (url.includes('/pulls/1')) {
-      prFetches++;
-      return json({
-        number: 1,
-        title: 't',
-        head: {sha: 'abc'},
-        labels: [{name: 'lgtm/need 2'}],
-        requested_reviewers: [],
-      });
+      calls.prFetches++;
+      return json({number: 1, title: 't', head: {sha: 'abc'}, labels: [{name: 'lgtm/need 2'}], requested_reviewers: []});
     }
-    if (url.includes('/issues?')) {
-      // PR #1 is returned by both the "lgtm/need 2" and "lgtm/done" queries
-      const hit = url.includes('need%202') || url.includes('lgtm%2Fdone');
-      return json(hit ? [{number: 1, pull_request: {}}] : []);
-    }
-    if (url.includes('/statuses/')) {
-      statusWrites++;
-      return json({});
-    }
+    if (url.includes('/issues?')) return json(listIssues(url));
+    if (url.includes('/statuses/')) calls.statusWrites++;
     return json({});
   });
+  return calls;
+}
 
-  try {
-    await run();
-    expect(prFetches).toEqual(1); // deduped across the two label queries
-    expect(statusWrites).toEqual(1); // status recomputed and written once
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('run() recomputes a PR once when it surfaces under two label queries', async () => {
+  const calls = stubGitHub((url) => url.includes('need%202') || url.includes('lgtm%2Fdone') ? [{number: 1, pull_request: {}}] : []);
+  await run();
+  expect(calls).toEqual({prFetches: 1, statusWrites: 1});
 });
 
 test('run(since) skips PRs older than the cutoff, processes newer ones', async () => {
-  const originalFetch = globalThis.fetch;
-  const json = (data: unknown) =>
-    Promise.resolve(
-      Response.json(data, {
-        headers: {'Content-Type': 'application/json'},
-      }),
-    );
-  let prFetches = 0;
-  globalThis.fetch = ((input: string | URL | Request) => {
-    const url = input instanceof Request ? input.url : input.toString();
-    if (url.includes('/pulls/1/reviews')) return json([]);
-    if (url.includes('/pulls/1')) {
-      prFetches++;
-      return json({
-        number: 1,
-        title: 't',
-        head: {sha: 'abc'},
-        labels: [{name: 'lgtm/need 2'}],
-        requested_reviewers: [],
-      });
-    }
-    if (url.includes('/issues?')) {
-      return json(
-        url.includes('need%202') ?
-          [{
-            number: 1,
-            pull_request: {},
-            updated_at: '2000-01-01T00:00:00Z',
-          }] :
-          [],
-      );
-    }
-    return json({});
-  });
-
-  try {
-    await run(Date.now()); // PR last touched in 2000 is older than the cutoff
-    expect(prFetches).toEqual(0);
-    await run(0); // epoch cutoff admits every PR
-    expect(prFetches).toEqual(1);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const calls = stubGitHub((url) => url.includes('need%202') ? [{number: 1, pull_request: {}, updated_at: '2000-01-01T00:00:00Z'}] : []);
+  await run(Date.now());
+  expect(calls.prFetches).toEqual(0);
+  await run(0);
+  expect(calls.prFetches).toEqual(1);
 });

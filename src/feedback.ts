@@ -7,13 +7,9 @@ export async function run() {
 }
 
 // close issue if a month has passed since it was last updated
-async function handleIssue(issue: {
-  number: number;
-  updated_at: string;
-}) {
-  const oneMonthAgo = (new Date(Date.now() - 1000 * 60 * 60 * 24 * 30))
-    .getTime();
-  if ((new Date(issue.updated_at)).getTime() < oneMonthAgo) {
+async function handleIssue(issue: {number: number; updated_at: string}) {
+  const oneMonthAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).getTime();
+  if (new Date(issue.updated_at).getTime() < oneMonthAgo) {
     console.info(`Closing issue #${issue.number} due to feedback timeout`);
     await addComment(
       issue.number,

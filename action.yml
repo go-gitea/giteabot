@@ -30,12 +30,11 @@ runs:
         package_json_file: ${{ steps.package-json.outputs.path }}
     - name: Install dependencies
       shell: bash
-      run: pnpm install --frozen-lockfile --prod --dir "${{ github.action_path }}"
+      run: pnpm install --frozen-lockfile --prod --dir "$GITHUB_ACTION_PATH"
     - name: Run backporter
       shell: bash
       env:
         BACKPORTER_GITHUB_TOKEN: ${{ inputs.github_token }}
         BACKPORTER_GITEA_FORK: ${{ inputs.gitea_fork }}
         BACKPORTER_CHECKS: ${{ inputs.checks }}
-      run: |
-        node "${{ github.action_path }}/src/action.ts"
+      run: node "$GITHUB_ACTION_PATH/src/action.ts"

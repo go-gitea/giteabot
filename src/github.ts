@@ -17,8 +17,7 @@ type SearchResults<T> = {
 };
 
 // 1.x has a release branch per minor version, semver releases (28+) per major version
-export const releaseVersion = ({major, minor}: SemVer) =>
-  major > 1 ? String(major) : `${major}.${minor}`;
+export const releaseVersion = ({major, minor}: SemVer) => major > 1 ? String(major) : `${major}.${minor}`;
 
 // reads a response body, returning an empty string when it cannot be read
 export async function readText(response: Response) {
@@ -42,22 +41,13 @@ function getRetryDelay(response: Response, message: string) {
     return capOrFail(retryAfterSeconds * 1000);
   }
 
-  const rateLimitRemaining = Number(
-    response.headers.get('x-ratelimit-remaining'),
-  );
+  const rateLimitRemaining = Number(response.headers.get('x-ratelimit-remaining'));
   const rateLimitReset = Number(response.headers.get('x-ratelimit-reset'));
-  if (
-    rateLimitRemaining === 0 &&
-    Number.isFinite(rateLimitReset) &&
-    rateLimitReset > 0
-  ) {
+  if (rateLimitRemaining === 0 && Number.isFinite(rateLimitReset) && rateLimitReset > 0) {
     return capOrFail(Math.max(rateLimitReset * 1000 - Date.now(), 1000));
   }
 
-  if (
-    response.status === 429 ||
-    (response.status === 403 && message.includes('rate limit'))
-  ) {
+  if (response.status === 429 || (response.status === 403 && message.includes('rate limit'))) {
     return 1000;
   }
 
@@ -73,34 +63,24 @@ const FETCH_MAX_ATTEMPTS = 5;
 // fetch that retries rate limits, server errors and network failures. Returns
 // the final response with an unread body — non-ok when the failure is not
 // retryable or retries are exhausted.
-async function fetchWithRetry(
-  url: string,
-  label: string,
-  options: RequestInit = {},
-): Promise<Response> {
+async function fetchWithRetry(url: string, label: string, options: RequestInit = {}): Promise<Response> {
   for (let attempt = 1; ; attempt++) {
     let response: Response;
     try {
       response = await fetch(url, {headers: HEADERS, ...options});
     } catch (error) {
       if (attempt >= FETCH_MAX_ATTEMPTS) throw error;
-      console.warn(
-        `${label} failed on attempt ${attempt}. Retrying in 1000ms.`,
-      );
+      console.warn(`${label} failed on attempt ${attempt}. Retrying in 1000ms.`);
       await sleep(1000);
       continue;
     }
     if (response.ok) return response;
 
     // only 403 needs the body (rate-limit check); clone to keep it readable
-    const message = response.status === 403 ?
-      (await readText(response.clone())).toLowerCase() :
-      '';
+    const message = response.status === 403 ? (await readText(response.clone())).toLowerCase() : '';
     const retryDelay = getRetryDelay(response, message);
     if (attempt >= FETCH_MAX_ATTEMPTS || retryDelay === null) return response;
-    console.warn(
-      `${label} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`,
-    );
+    console.warn(`${label} failed on attempt ${attempt}. Retrying in ${retryDelay}ms.`);
     await sleep(retryDelay);
   }
 }
@@ -110,9 +90,7 @@ async function fetchWithRetry(
 async function parseJSON(response: Response, label: string) {
   const text = await readText(response);
   if (!response.ok) {
-    throw new Error(
-      `${label} failed: ${response.status} ${text.slice(0, 300)}`,
-    );
+    throw new Error(`${label} failed: ${response.status} ${text.slice(0, 300)}`);
   }
   if (!text) return null;
   try {
@@ -122,11 +100,7 @@ async function parseJSON(response: Response, label: string) {
   }
 }
 
-async function fetchJSON(
-  url: string,
-  label: string,
-  options?: RequestInit,
-) {
+async function fetchJSON(url: string, label: string, options?: RequestInit) {
   const response = await fetchWithRetry(url, label, options);
   return {response, json: await parseJSON(response, label)};
 }
@@ -142,9 +116,7 @@ async function mutate(url: string, label: string, options: RequestInit) {
   return response.ok;
 }
 
-async function fetchSearchResults<T>(
-  query: string,
-): Promise<SearchResults<T>> {
+async function fetchSearchResults<T>(query: string): Promise<SearchResults<T>> {
   const {json} = await fetchJSON(
     `${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}`,
     `GitHub search ${JSON.stringify(query)}`,
@@ -159,9 +131,8 @@ async function fetchList<T>(path: string): Promise<T[]> {
   let url: string | null = `${GITHUB_API}${path}`;
   while (url) {
     const {response, json} = await fetchJSON(url, `GitHub list ${url}`);
-    all.push(...(json as T[]));
-    const next = /<([^>]+)>[^,]*?\brel="next"/
-      .exec(response.headers.get('link') ?? '');
+    all.push(...json);
+    const next = /<([^>]+)>[^,]*?\brel="next"/.exec(response.headers.get('link') ?? '');
     url = next?.[1] ?? null;
   }
   return all;
@@ -189,60 +160,41 @@ type ListIssue = {
   pull_request?: {merged_at: string | null};
 };
 
-const fetchIssuesByLabel = (
-  state: 'open' | 'closed',
-  label: string,
-  suffix = '',
-) =>
+const fetchIssuesByLabel = (state: 'open' | 'closed', label: string, suffix = '') =>
   fetchList<ListIssue>(
-    `/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&labels=${
-      encodeURIComponent(label)
-    }${suffix}`,
+    `/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&labels=${encodeURIComponent(label)}${suffix}`,
   );
 
 // returns a list of PRs that are merged and have the given label
 export const fetchMergedWithLabel = async (label: string) =>
-  (await fetchIssuesByLabel('closed', label))
-    .filter((item) => item.pull_request?.merged_at);
+  (await fetchIssuesByLabel('closed', label)).filter((item) => item.pull_request?.merged_at);
 
 // returns a list of open issues with the given label
 export const fetchOpenIssuesWithLabel = async (label: string) =>
-  (await fetchIssuesByLabel('open', label))
-    .filter((item) => !item.pull_request);
+  (await fetchIssuesByLabel('open', label)).filter((item) => !item.pull_request);
 
 // returns a list of open PRs with the given label
 export const fetchOpenPrsWithLabel = async (label: string) =>
-  (await fetchIssuesByLabel('open', label))
-    .filter((item) => item.pull_request);
+  (await fetchIssuesByLabel('open', label)).filter((item) => item.pull_request);
 
 // returns a list of PRs pending merge (have the label reviewed/wait-merge)
 export const fetchPendingMerge = async () =>
-  (await fetchIssuesByLabel(
-    'open',
-    'reviewed/wait-merge',
-    '&sort=created&direction=asc',
-  )).filter((item) => item.pull_request);
+  (await fetchIssuesByLabel('open', 'reviewed/wait-merge', '&sort=created&direction=asc')).filter((item) => item.pull_request);
 
 // returns a list of all open PRs
 export function fetchOpenPrs(): Promise<PullRequest[]> {
-  return fetchList<PullRequest>(
-    `/repos/${TARGET_REPO}/pulls?per_page=100&state=open`,
-  );
+  return fetchList<PullRequest>(`/repos/${TARGET_REPO}/pulls?per_page=100&state=open`);
 }
 
 // returns a list of open PRs that target the given branch
 export function fetchTargeting(branch: string): Promise<PullRequest[]> {
   return fetchList<PullRequest>(
-    `/repos/${TARGET_REPO}/pulls?per_page=100&state=open&base=${
-      encodeURIComponent(branch)
-    }`,
+    `/repos/${TARGET_REPO}/pulls?per_page=100&state=open&base=${encodeURIComponent(branch)}`,
   );
 }
 
 // returns a list of closed PRs that have the given milestone
-export function fetchUnmergedClosedWithMilestone(
-  milestoneTitle: string,
-) {
+export function fetchUnmergedClosedWithMilestone(milestoneTitle: string) {
   return fetchSearchResults<{number: number}>(
     `is:pr is:closed is:unmerged milestone:${milestoneTitle} repo:${TARGET_REPO}`,
   );
@@ -250,9 +202,7 @@ export function fetchUnmergedClosedWithMilestone(
 
 // returns a list of breaking PRs that don't have the label pr/breaking
 export function fetchBreakingWithoutLabel() {
-  return fetchSearchResults<{number: number}>(
-    `is:pr "## :warning: BREAKING" -label:pr/breaking repo:${TARGET_REPO}`,
-  );
+  return fetchSearchResults<{number: number}>(`is:pr "## :warning: BREAKING" -label:pr/breaking repo:${TARGET_REPO}`);
 }
 
 // returns a list of files changed in the given PR number
@@ -288,31 +238,20 @@ export async function updatePr(prNumber: number): Promise<Response> {
 }
 
 // sets a commit status
-export function setCommitStatus(
-  sha: string,
-  state: 'error' | 'failure' | 'pending' | 'success',
-  description: string,
-) {
-  return fetchWithRetry(
-    `${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`,
-    `GitHub commit status of ${sha}`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        state,
-        context: 'giteabot/lgtm',
-        description,
-      }),
-    },
-  );
+export function setCommitStatus(sha: string, state: 'error' | 'failure' | 'pending' | 'success', description: string) {
+  return fetchWithRetry(`${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`, `GitHub commit status of ${sha}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      state,
+      context: 'giteabot/lgtm',
+      description,
+    }),
+  });
 }
 
 // get a target repo branch
 export async function fetchBranch(branch: string) {
-  const {json} = await fetchJSON(
-    `${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`,
-    `GitHub branch ${branch}`,
-  );
+  const {json} = await fetchJSON(`${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`, `GitHub branch ${branch}`);
   return json;
 }
 
@@ -325,9 +264,7 @@ export async function branchExists(branch: string): Promise<boolean> {
   );
   if (response.status === 404) return false;
   if (!response.ok) {
-    throw new Error(
-      `branchExists(${branch}) failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`branchExists(${branch}) failed: ${response.status} ${response.statusText}`);
   }
   return true;
 }
@@ -358,10 +295,7 @@ export function removeLabel(prNumber: number, label: string) {
 
 // returns the PR
 export async function fetchPr(prNumber: number) {
-  const {json} = await fetchJSON(
-    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`,
-    `GitHub PR #${prNumber}`,
-  );
+  const {json} = await fetchJSON(`${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`, `GitHub PR #${prNumber}`);
   return json;
 }
 
@@ -384,10 +318,7 @@ export function removeMilestone(prNumber: number) {
 }
 
 // returns true if a backport PR exists for the given PR number and Gitea version
-export async function backportPrExists(
-  pr: {number: number},
-  giteaMajorMinorVersion: string,
-) {
+export async function backportPrExists(pr: {number: number}, giteaMajorMinorVersion: string) {
   // check the cache first
   const cacheKey = `${pr.number}_${giteaMajorMinorVersion}`;
   if (backportPrExistsCache.has(cacheKey)) {
@@ -405,9 +336,7 @@ export async function backportPrExists(
   // also check if a branch that looks like the backport branch (getPrBranchName) exists
   const branchName = getPrBranchName(pr.number, giteaMajorMinorVersion);
   const response = await fetchWithRetry(
-    `${GITHUB_API}/repos/${
-      process.env.BACKPORTER_GITEA_FORK
-    }/branches/${branchName}`,
+    `${GITHUB_API}/repos/${process.env.BACKPORTER_GITEA_FORK}/branches/${branchName}`,
     `GitHub backport branch ${branchName}`,
     {method: 'HEAD'},
   );
@@ -422,20 +351,14 @@ type Milestone = {title: string; number: number};
 
 // get Gitea milestones
 export async function getMilestones(): Promise<Milestone[]> {
-  const {json} = await fetchJSON(
-    `${GITHUB_API}/repos/${TARGET_REPO}/milestones`,
-    'GitHub milestones',
-  );
+  const {json} = await fetchJSON(`${GITHUB_API}/repos/${TARGET_REPO}/milestones`, 'GitHub milestones');
   const milestones: Milestone[] = json.filter((m: Milestone) => valid(m.title));
 
   // take only the earliest version of each release branch (e.g. 1.19.0, 1.19.1 -> 1.19.0 and 28.0.0, 28.1.0 -> 28.0.0)
   const earliestPatchVersions: Record<string, Milestone> = {};
   for (const milestone of milestones) {
     const key = releaseVersion(parse(milestone.title)!);
-    if (
-      !earliestPatchVersions[key] ||
-      lt(milestone.title, earliestPatchVersions[key].title)
-    ) {
+    if (!earliestPatchVersions[key] || lt(milestone.title, earliestPatchVersions[key].title)) {
       earliestPatchVersions[key] = milestone;
     }
   }
@@ -443,17 +366,13 @@ export async function getMilestones(): Promise<Milestone[]> {
   return Object.values(earliestPatchVersions);
 }
 
-export async function getPrReviewers(
-  pr: {number: number; requested_reviewers: {login: string}[]},
-): Promise<{approvers: Set<string>; blockers: Set<string>}> {
+export async function getPrReviewers(pr: {
+  number: number;
+  requested_reviewers: {login: string}[];
+}): Promise<{approvers: Set<string>; blockers: Set<string>}> {
   // load all reviews
   const reviews: {
-    state:
-      | 'APPROVED' |
-      'CHANGES_REQUESTED' |
-      'COMMENTED' |
-      'DISMISSED' |
-      'PENDING';
+    state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
     user: {login: string};
   }[] = [];
   let page = 1;
@@ -503,14 +422,13 @@ export async function createBackportPr(
     title: string;
     number: number;
     body: string;
-    labels: [{name: string}];
+    labels: {name: string}[];
     user: {login: string};
     requested_reviewers: {login: string}[];
   },
   giteaVersion: GiteaVersion,
 ) {
-  let prDescription =
-    `Backport #${originalPr.number} by @${originalPr.user.login}`;
+  let prDescription = `Backport #${originalPr.number} by @${originalPr.user.login}`;
   if (originalPr.body) {
     prDescription += `\n\n${originalPr.body}`;
   }
@@ -521,12 +439,7 @@ export async function createBackportPr(
       method: 'POST',
       body: JSON.stringify({
         title: `${originalPr.title} (#${originalPr.number})`,
-        head: `${process.env.BACKPORTER_GITEA_FORK?.split('/')[0]}:${
-          getPrBranchName(
-            originalPr.number,
-            giteaVersion.majorMinorVersion,
-          )
-        }`,
+        head: `${process.env.BACKPORTER_GITEA_FORK?.split('/')[0]}:${getPrBranchName(originalPr.number, giteaVersion.majorMinorVersion)}`,
         base: `release/v${giteaVersion.majorMinorVersion}`,
         body: prDescription,
         maintainer_can_modify: true,
@@ -555,14 +468,10 @@ export async function createBackportPr(
   );
 
   // set assignee
-  await mutate(
-    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${json.number}`,
-    `GitHub assignee of PR #${json.number}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({assignees: [originalPr.user.login]}),
-    },
-  );
+  await mutate(`${GITHUB_API}/repos/${TARGET_REPO}/issues/${json.number}`, `GitHub assignee of PR #${json.number}`, {
+    method: 'PATCH',
+    body: JSON.stringify({assignees: [originalPr.user.login]}),
+  });
 
   // request review from original PR approvers
   const {approvers} = await getPrReviewers(originalPr);
@@ -573,8 +482,7 @@ export async function createBackportPr(
   );
 
   // if the original PR had exactly one backport/* label, add the backport/done label to it
-  const backportLabels = originalPr.labels
-    .filter((label) => label.name.startsWith('backport/'));
+  const backportLabels = originalPr.labels.filter((label) => label.name.startsWith('backport/'));
   if (backportLabels.length === 1) {
     await addLabels(originalPr.number, ['backport/done']);
     console.info(`Added backport/done label to PR #${originalPr.number}`);
@@ -582,11 +490,10 @@ export async function createBackportPr(
 }
 
 export async function addLabels(prNumber: number, labels: string[]) {
-  await mutate(
-    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}/labels`,
-    `GitHub add labels to #${prNumber}`,
-    {method: 'POST', body: JSON.stringify({labels})},
-  );
+  await mutate(`${GITHUB_API}/repos/${TARGET_REPO}/issues/${prNumber}/labels`, `GitHub add labels to #${prNumber}`, {
+    method: 'POST',
+    body: JSON.stringify({labels}),
+  });
 }
 
 export async function addComment(issueNumber: number, comment: string) {
@@ -599,10 +506,7 @@ export async function addComment(issueNumber: number, comment: string) {
 }
 
 // locks a given issue
-export async function lockIssue(
-  issueNumber: number,
-  reason: 'off-topic' | 'too heated' | 'resolved' | 'spam',
-) {
+export async function lockIssue(issueNumber: number, reason: 'off-topic' | 'too heated' | 'resolved' | 'spam') {
   const locked = await mutate(
     `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}/lock`,
     `GitHub lock issue #${issueNumber}`,
@@ -620,9 +524,7 @@ export function fetchClosedOldIssuesAndPRs(before: Date) {
     number: number;
     pull_request?: {url: string};
     updated_at: string;
-  }>(
-    `is:closed is:unlocked closed:<${before.toISOString()} repo:${TARGET_REPO}`,
-  );
+  }>(`is:closed is:unlocked closed:<${before.toISOString()} repo:${TARGET_REPO}`);
 }
 
 // returns the last comment of the given issue
@@ -637,18 +539,16 @@ export async function fetchLastComment(issueNumber: number) {
 
 // closes the given issue
 export function closeIssue(issueNumber: number) {
-  return mutate(
-    `${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}`,
-    `GitHub close issue #${issueNumber}`,
-    {method: 'PATCH', body: JSON.stringify({state: 'closed'})},
-  );
+  return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/issues/${issueNumber}`, `GitHub close issue #${issueNumber}`, {
+    method: 'PATCH',
+    body: JSON.stringify({state: 'closed'}),
+  });
 }
 
 // closes the given PR
 export function closePr(prNumber: number) {
-  return mutate(
-    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`,
-    `GitHub close PR #${prNumber}`,
-    {method: 'PATCH', body: JSON.stringify({state: 'closed'})},
-  );
+  return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}`, `GitHub close PR #${prNumber}`, {
+    method: 'PATCH',
+    body: JSON.stringify({state: 'closed'}),
+  });
 }

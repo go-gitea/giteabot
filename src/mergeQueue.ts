@@ -1,8 +1,7 @@
 import {fetchPendingMerge, removeLabel} from './github.ts';
 import * as prActions from './prActions.ts';
-import {debounce} from './debounce.ts';
 
-async function updateBranch() {
+export async function run() {
   // update all PRs pending merge (only if they need an update)
   for (const pr of await fetchPendingMerge()) {
     const err = await prActions.updateBranch(pr);
@@ -13,6 +12,3 @@ async function updateBranch() {
     }
   }
 }
-
-// make sure we don't trigger too often
-export const run = debounce(updateBranch, 8000);

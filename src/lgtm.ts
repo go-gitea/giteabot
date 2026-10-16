@@ -16,15 +16,13 @@ export const lgtmLabels = {
 };
 
 // given a pr number, set its lgtm status check and lgtm label
-export async function setPrStatusAndLabel(
-  pr: {
-    labels: {name: string}[];
-    head: {sha: string};
-    title: string;
-    number: number;
-    requested_reviewers: {login: string}[];
-  },
-) {
+export async function setPrStatusAndLabel(pr: {
+  labels: {name: string}[];
+  head: {sha: string};
+  title: string;
+  number: number;
+  requested_reviewers: {login: string}[];
+}) {
   let reviewers;
   try {
     reviewers = await getPrReviewers(pr);
@@ -38,21 +36,17 @@ export async function setPrStatusAndLabel(
 
   // remove any undesired lgtm labels
   await Promise.all(
-    currentLgtmLabels.filter((l) => l.name !== desiredLabel).map(
-      async (label) => {
+    currentLgtmLabels
+      .filter((l) => l.name !== desiredLabel)
+      .map(async (label) => {
         const response = await removeLabel(pr.number, label.name);
         if (response.ok) {
-          console.info(
-            `Removed ${label.name} from "${pr.title}" (#${pr.number})`,
-          );
+          console.info(`Removed ${label.name} from "${pr.title}" (#${pr.number})`);
         } else {
-          console.error(
-            `Failed to remove ${label.name} from "${pr.title}" (#${pr.number})`,
-          );
+          console.error(`Failed to remove ${label.name} from "${pr.title}" (#${pr.number})`);
           console.error(await response.text());
         }
-      },
-    ),
+      }),
   );
 
   // add desired label if it's not there
@@ -63,13 +57,9 @@ export async function setPrStatusAndLabel(
   // set commit status
   const response = await setCommitStatus(pr.head.sha, state, message);
   if (response.ok) {
-    console.info(
-      `Set commit status in "${pr.title}" (#${pr.number})`,
-    );
+    console.info(`Set commit status in "${pr.title}" (#${pr.number})`);
   } else {
-    console.error(
-      `Failed to set commit status in  "${pr.title}" (#${pr.number})`,
-    );
+    console.error(`Failed to set commit status in  "${pr.title}" (#${pr.number})`);
     console.error(await response.text());
   }
 }
@@ -84,9 +74,7 @@ export async function setPrStatusAndLabelBySha(sha: string) {
 }
 
 // returns the status, message, and label for a given number of approvals
-export function getPrStatusAndLabel(
-  reviewers: {approvers: Set<string>; blockers: Set<string>},
-) {
+export function getPrStatusAndLabel(reviewers: {approvers: Set<string>; blockers: Set<string>}) {
   let desiredLabel = lgtmLabels.need2;
   let message = 'Needs two more approvals';
   let state: 'pending' | 'success' | 'failure' = 'pending';

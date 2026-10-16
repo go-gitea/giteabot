@@ -1,10 +1,5 @@
 import {TARGET_REPO_HTTP} from './config.ts';
-import {
-  addComment,
-  addLabels,
-  closePr,
-  fetchOpenPrsWithLabel,
-} from './github.ts';
+import {addComment, addLabels, closePr, fetchOpenPrsWithLabel} from './github.ts';
 import {lgtmLabels} from './lgtm.ts';
 
 export async function run() {
@@ -14,14 +9,9 @@ export async function run() {
 }
 
 // close PR if two weeks have passed since it was last updated. Remind TOC if one week has passed
-async function handlePr(pr: {
-  number: number;
-  updated_at: string;
-  labels: {name: string}[];
-}) {
+async function handlePr(pr: {number: number; updated_at: string; labels: {name: string}[]}) {
   const lastPrUpdateTime = new Date(pr.updated_at).getTime();
-  const oneWeekAgo = (new Date(Date.now() - 1000 * 60 * 60 * 24 * 7))
-    .getTime();
+  const oneWeekAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).getTime();
 
   if (
     lastPrUpdateTime < oneWeekAgo &&
@@ -37,8 +27,7 @@ async function handlePr(pr: {
     return;
   }
 
-  const twoWeeksAgo = (new Date(Date.now() - 1000 * 60 * 60 * 24 * 14))
-    .getTime();
+  const twoWeeksAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 14).getTime();
 
   if (lastPrUpdateTime < twoWeeksAgo) {
     console.info(`Closing PR #${pr.number} due to pr/last-call timeout`);

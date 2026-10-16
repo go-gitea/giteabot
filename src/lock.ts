@@ -1,9 +1,4 @@
-import {
-  addComment,
-  fetchClosedOldIssuesAndPRs,
-  fetchLastComment,
-  lockIssue,
-} from './github.ts';
+import {addComment, fetchClosedOldIssuesAndPRs, fetchLastComment, lockIssue} from './github.ts';
 
 const MILLISECONDS_IN_A_DAY = 1000 * 60 * 60 * 24;
 
@@ -19,31 +14,22 @@ export async function run() {
     return [];
   }
   return Promise.all(
-    issues.items.map(
-      async (
-        issue: {
-          number: number;
-          pull_request?: {url: string};
-        },
-      ) => {
-        const lockedSuccessfully = await lockIssue(issue.number, 'resolved');
+    issues.items.map(async (issue) => {
+      const lockedSuccessfully = await lockIssue(issue.number, 'resolved');
 
-        const lastComment = await fetchLastComment(issue.number);
-        let activeDiscussion = false;
-        if (lastComment) {
-          activeDiscussion = new Date(lastComment.created_at) > twoWeeksAgo;
-        }
+      const lastComment = await fetchLastComment(issue.number);
+      let activeDiscussion = false;
+      if (lastComment) {
+        activeDiscussion = new Date(lastComment.created_at) > twoWeeksAgo;
+      }
 
-        // if the issue was commented on in the two weeks, we add a comment
-        if (lockedSuccessfully && activeDiscussion) {
-          await addComment(
-            issue.number,
-            `We lock ${
-              issue.pull_request ? 'pull request' : 'issue'
-            }s 3 months after they were closed. If there's any need for further discussion, please open a new issue. :tea:`,
-          );
-        }
-      },
-    ),
+      // if the issue was commented on in the two weeks, we add a comment
+      if (lockedSuccessfully && activeDiscussion) {
+        await addComment(
+          issue.number,
+          `We lock ${issue.pull_request ? 'pull request' : 'issue'}s 3 months after they were closed. If there's any need for further discussion, please open a new issue. :tea:`,
+        );
+      }
+    }),
   );
 }

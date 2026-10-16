@@ -19,10 +19,7 @@ try {
   process.exit(1);
 }
 
-const requiredEnv = [
-  'BACKPORTER_GITHUB_TOKEN',
-  ...(enabledChecks.has('backport') ? ['BACKPORTER_GITEA_FORK'] : []),
-];
+const requiredEnv = ['BACKPORTER_GITHUB_TOKEN', ...(enabledChecks.has('backport') ? ['BACKPORTER_GITEA_FORK'] : [])];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
 if (missingEnv.length > 0) {
   console.error(`Missing required env vars: ${missingEnv.join(', ')}`);
@@ -31,10 +28,7 @@ if (missingEnv.length > 0) {
 
 const shouldRunCheck = (checkName: CheckName) => enabledChecks.has(checkName);
 
-async function runCheck(
-  checkName: CheckName,
-  callback: () => unknown,
-) {
+async function runCheck(checkName: CheckName, callback: () => unknown) {
   if (!shouldRunCheck(checkName)) {
     console.info(`Skipping ${checkName} check`);
     return;
@@ -63,10 +57,7 @@ async function runMaintenance() {
   await runCheck('lgtm', () => lgtm.run());
 }
 
-async function handlePullRequest(
-  action: string,
-  pr: typeof payload.pull_request,
-) {
+async function handlePullRequest(action: string, pr: typeof payload.pull_request) {
   if (action === 'labeled' || action === 'unlabeled') {
     const labelName = payload.label?.name;
     if (labelName && labels.isRelevantLabel(labelName)) {
@@ -80,10 +71,7 @@ async function handlePullRequest(
   if (action === 'opened') {
     await runCheck('labels', () => labels.run());
     if (pr?.base?.ref === 'main') {
-      await runCheck(
-        'translation_comment',
-        () => comments.commentIfTranslationsChanged(pr),
-      );
+      await runCheck('translation_comment', () => comments.commentIfTranslationsChanged(pr));
     }
     if (pr?.base?.ref?.startsWith('release/')) {
       await runCheck('milestones', () => milestones.assign(pr));
@@ -121,26 +109,19 @@ switch (eventName) {
     // touched in the last hour (the daily maintenance sweep is the backstop). Skip
     // labeled/unlabeled: the bot's own lgtm label writes fire those and would
     // re-trigger the reconcile.
-    const isLabelEvent = payload.action === 'labeled' ||
-      payload.action === 'unlabeled';
+    const isLabelEvent = payload.action === 'labeled' || payload.action === 'unlabeled';
     if (eventName === 'pull_request_target' && !isLabelEvent) {
       await runCheck('lgtm', () => lgtm.run(Date.now() - 1000 * 60 * 60));
     }
     break;
   }
   case 'pull_request_review': {
-    await runCheck(
-      'lgtm',
-      () => lgtm.setPrStatusAndLabel(payload.pull_request),
-    );
+    await runCheck('lgtm', () => lgtm.setPrStatusAndLabel(payload.pull_request));
     break;
   }
   // pull_request_review gets a read-only token on fork PRs, so a review workflow triggers this writable run
   case 'workflow_run': {
-    await runCheck(
-      'lgtm',
-      () => lgtm.setPrStatusAndLabelBySha(payload.workflow_run.head_sha),
-    );
+    await runCheck('lgtm', () => lgtm.setPrStatusAndLabelBySha(payload.workflow_run.head_sha));
     break;
   }
   case 'schedule':

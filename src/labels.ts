@@ -1,28 +1,16 @@
-import {
-  addLabels,
-  fetchBreakingWithoutLabel,
-  fetchMergedWithLabel,
-  fetchTargeting,
-  removeLabel,
-} from './github.ts';
+import {addLabels, fetchBreakingWithoutLabel, fetchMergedWithLabel, fetchTargeting, removeLabel} from './github.ts';
 import {fetchGiteaVersions} from './giteaVersion.ts';
-import {debounce} from './debounce.ts';
 import type {PullRequest} from './types.ts';
 
 // a relevant label is one that is used to control the merge queue,
 // manage backports or any other label that causes the bot to act on
 // detection, such as reviewed/* or backport/*
 export function isRelevantLabel(label: string): boolean {
-  return label.startsWith('reviewed/') || label.startsWith('backport/') ||
-    label.startsWith('giteabot/');
+  return label.startsWith('reviewed/') || label.startsWith('backport/') || label.startsWith('giteabot/');
 }
 
-async function maintain() {
-  const labelsToRemoveAfterMerge = [
-    'reviewed/wait-merge',
-    'reviewed/prioritize-merge',
-    'pr/last-call',
-  ];
+export async function run() {
+  const labelsToRemoveAfterMerge = ['reviewed/wait-merge', 'reviewed/prioritize-merge', 'pr/last-call'];
   await Promise.all([
     removeLabelsFromMergedPr(labelsToRemoveAfterMerge),
     removeBackportLabelsFromPrsTargetingReleaseBranches(),
@@ -33,22 +21,15 @@ async function maintain() {
 // add pr/breaking to all breaking PRs that don't have it
 async function addKindBreakingToBreakingPrs() {
   const breakingPrs = await fetchBreakingWithoutLabel();
-  return Promise.all(breakingPrs.items.map(async (pr: {number: number}) => {
-    await addLabels(pr.number, ['pr/breaking']);
-  }));
+  return Promise.all(breakingPrs.items.map((pr) => addLabels(pr.number, ['pr/breaking'])));
 }
 
-async function removeLabelFromMergedPr(
-  pr: {title: string; number: number},
-  label: string,
-) {
+async function removeLabelFromMergedPr(pr: {title: string; number: number}, label: string) {
   const response = await removeLabel(pr.number, label);
   if (response.ok) {
     console.info(`Removed ${label} from "${pr.title}" (#${pr.number})`);
   } else {
-    console.error(
-      `Failed to remove ${label} from "${pr.title}" (#${pr.number})`,
-    );
+    console.error(`Failed to remove ${label} from "${pr.title}" (#${pr.number})`);
     console.error(await response.text());
   }
 }
@@ -77,29 +58,17 @@ export async function removeBackportLabelsFromPrsTargetingReleaseBranches() {
 
 // given a list of PRs, removes the backport/* labels from them
 export function removeBackportLabelsFromPrs(prs: PullRequest[]) {
-  if (prs === undefined) {
-    throw new Error('removeBackportLabelsFromPrs called with undefined');
-  }
-  return Promise.all(prs.flatMap((pr: PullRequest) => {
-    const backportLabels = pr.labels.filter((label: {name: string}) =>
-      label.name.startsWith('backport/'),
-    );
+  return Promise.all(prs.flatMap((pr) => {
+    const backportLabels = pr.labels.filter((label) => label.name.startsWith('backport/'));
 
-    return backportLabels.map(async (label: {name: string}) => {
+    return backportLabels.map(async (label) => {
       const response = await removeLabel(pr.number, label.name);
       if (response.ok) {
-        console.info(
-          `Removed ${label.name} from "${pr.title}" (#${pr.number})`,
-        );
+        console.info(`Removed ${label.name} from "${pr.title}" (#${pr.number})`);
       } else {
-        console.error(
-          `Failed to remove ${label.name} from "${pr.title}" (#${pr.number})`,
-        );
+        console.error(`Failed to remove ${label.name} from "${pr.title}" (#${pr.number})`);
         console.error(await response.text());
       }
     });
   }));
 }
-
-// make sure we don't trigger too often
-export const run = debounce(maintain, 8000);

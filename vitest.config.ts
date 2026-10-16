@@ -10,5 +10,6 @@ export default defineConfig({
     globals: true,
     watch: false,
     maxWorkers: '50%',
+    unstubGlobals: true,
   },
 });

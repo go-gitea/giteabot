@@ -1,29 +1,20 @@
 import * as cmd from './cmd.ts';
 import {TARGET_REPO_GIT} from './config.ts';
 
-export const getPrBranchName = (
-  prNumber: number,
-  giteaMajorMinorVersion: string,
-) => `backport-${prNumber}-v${giteaMajorMinorVersion}`;
+export const getPrBranchName = (prNumber: number, giteaMajorMinorVersion: string) =>
+  `backport-${prNumber}-v${giteaMajorMinorVersion}`;
 
 export async function initializeGitRepo(user: string, email: string | null) {
   await cmd.run('git', {
     args: [
       'clone',
-      `https://${process.env.BACKPORTER_GITHUB_TOKEN}@github.com/${
-        process.env.BACKPORTER_GITEA_FORK
-      }.git`,
+      `https://${process.env.BACKPORTER_GITHUB_TOKEN}@github.com/${process.env.BACKPORTER_GITEA_FORK}.git`,
       'gitea',
     ],
   });
   await cmd.run('git', {
     cwd: 'gitea',
-    args: [
-      'remote',
-      'add',
-      'upstream',
-      TARGET_REPO_GIT,
-    ],
+    args: ['remote', 'add', 'upstream', TARGET_REPO_GIT],
   });
 
   // set the user name and email
@@ -77,9 +68,7 @@ export async function cherryPickPr(
   });
 
   if (!success) {
-    console.error(
-      `Cherry-pick failed:\n${stdout}\n${stderr}`.trim(),
-    );
+    console.error(`Cherry-pick failed:\n${stdout}\n${stderr}`.trim());
     await cmd.run('git', {
       cwd: 'gitea',
       args: ['cherry-pick', '--abort'],

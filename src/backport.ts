@@ -22,13 +22,8 @@ async function initializeBackporter() {
   }
   if (!initializing) {
     initializing = (async () => {
-      if (
-        !process.env.BACKPORTER_GITEA_FORK ||
-        !process.env.BACKPORTER_GITHUB_TOKEN
-      ) {
-        console.error(
-          'BACKPORTER_GITEA_FORK and BACKPORTER_GITHUB_TOKEN must be set',
-        );
+      if (!process.env.BACKPORTER_GITEA_FORK || !process.env.BACKPORTER_GITHUB_TOKEN) {
+        console.error('BACKPORTER_GITEA_FORK and BACKPORTER_GITHUB_TOKEN must be set');
         return;
       }
 
@@ -44,9 +39,7 @@ export async function run() {
   await initializeBackporter();
   const versions = await fetchGiteaVersions();
   // skip the in-development next-minor milestone (no release branch yet)
-  const hasBranch = await Promise.all(
-    versions.map((v) => branchExists(`release/v${v.majorMinorVersion}`)),
-  );
+  const hasBranch = await Promise.all(versions.map((v) => branchExists(`release/v${v.majorMinorVersion}`)));
   for (const [index, giteaVersion] of versions.entries()) {
     if (!hasBranch[index]) continue;
     const candidates = await fetchCandidates(giteaVersion.majorMinorVersion);
@@ -64,17 +57,10 @@ async function parseCandidate(candidate: Issue, giteaVersion: GiteaVersion) {
   }
   const originalPr = await fetchPr(candidate.number);
   console.info(`Cherry-picking #${originalPr.number}`);
-  const success = await cherryPickPr(
-    originalPr.merge_commit_sha,
-    originalPr.number,
-    giteaVersion.majorMinorVersion,
-  );
+  const success = await cherryPickPr(originalPr.merge_commit_sha, originalPr.number, giteaVersion.majorMinorVersion);
 
   if (!success) {
-    const branch = getPrBranchName(
-      originalPr.number,
-      giteaVersion.majorMinorVersion,
-    );
+    const branch = getPrBranchName(originalPr.number, giteaVersion.majorMinorVersion);
     await addComment(
       originalPr.number,
       `I was unable to create a backport for ${giteaVersion.majorMinorVersion}. @${originalPr.user.login}, please send one manually. :tea:
@@ -87,10 +73,7 @@ git cherry-pick ${originalPr.merge_commit_sha}
 \`\`\`
 `,
     );
-    await addLabels(
-      originalPr.number,
-      ['backport/manual'],
-    );
+    await addLabels(originalPr.number, ['backport/manual']);
     return;
   }
 

@@ -21,9 +21,8 @@ jobs:
         with:
           cache: pnpm
           node-version: 24
-      - run: make lint test build
+      - run: make lint test
         env:
           INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_GITEA_FORK: GiteaBot/gitea
           BACKPORTER_REPO: go-gitea/gitea
-      - run: git diff --exit-code dist

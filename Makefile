@@ -21,10 +21,6 @@ lint-js-fix: node_modules ## lint js and ts files and fix issues
 	pnpm exec eslint $(ESLINT_ARGS) $(ESLINT_FILES) --fix
 	pnpm exec tsc
 
-.PHONY: build
-build: node_modules ## bundle the action into dist/index.js
-	pnpm exec tsdown
-
 .PHONY: test
 test: node_modules ## run tests
 	INPUT_GITHUB_TOKEN="$${INPUT_GITHUB_TOKEN:-$$(gh auth token 2>/dev/null)}" \

@@ -372,12 +372,12 @@ export async function getPrReviewers(pr: {number: number; requested_reviewers?: 
   // a blocker who re-requested their own review has lifted their block
   const requestedBlockers = pr.requested_reviewers!.map((reviewer) => reviewer.login).filter((login) => blockers.has(login));
   if (requestedBlockers.length > 0) {
-    const timeline = await fetchList<{event: string; requested_reviewer?: {login: string}; review_requester?: {login: string}}>(
-      `/repos/${TARGET_REPO}/issues/${pr.number}/timeline?per_page=100`,
+    const events = await fetchList<{event: string; requested_reviewer?: {login: string}; review_requester?: {login: string}}>(
+      `/repos/${TARGET_REPO}/issues/${pr.number}/events?per_page=100`,
     );
-    // the timeline is chronological, so the last request per reviewer wins
+    // events are chronological, so the last request per reviewer wins
     const lastRequester = new Map<string, string>();
-    for (const event of timeline) {
+    for (const event of events) {
       if (event.event === 'review_requested' && event.requested_reviewer && event.review_requester) {
         lastRequester.set(event.requested_reviewer.login, event.review_requester.login);
       }

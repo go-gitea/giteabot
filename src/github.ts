@@ -369,6 +369,24 @@ export async function getPrReviewers(pr: {number: number; requested_reviewers?: 
     approvers.delete(requestedReviewer.login);
   }
 
+  // a blocker who re-requested their own review has lifted their block
+  const requestedBlockers = pr.requested_reviewers!.map((reviewer) => reviewer.login).filter((login) => blockers.has(login));
+  if (requestedBlockers.length > 0) {
+    const events = await fetchList<{event: string; requested_reviewer?: {login: string}; review_requester?: {login: string}}>(
+      `/repos/${TARGET_REPO}/issues/${pr.number}/events?per_page=100`,
+    );
+    // events are chronological, so the last request per reviewer wins
+    const lastRequester = new Map<string, string>();
+    for (const event of events) {
+      if (event.event === 'review_requested' && event.requested_reviewer && event.review_requester) {
+        lastRequester.set(event.requested_reviewer.login, event.review_requester.login);
+      }
+    }
+    for (const login of requestedBlockers) {
+      if (lastRequester.get(login) === login) blockers.delete(login);
+    }
+  }
+
   return {approvers, blockers};
 }
 

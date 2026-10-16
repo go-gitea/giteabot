@@ -86,47 +86,47 @@ remind the TOC to review the PR.
    your fork.
 2. Store the following secrets in the target repository:
 
-```
-BACKPORTER_GITHUB_TOKEN= # GitHub personal access token
-BACKPORTER_GITEA_FORK= # Fork of go-gitea/gitea (e.g. yardenshoham/gitea), only needed for the backport check
-```
+   ```
+   BACKPORTER_GITHUB_TOKEN= # GitHub personal access token
+   BACKPORTER_GITEA_FORK= # Fork of go-gitea/gitea (e.g. yardenshoham/gitea), only needed for the backport check
+   ```
 
 3. Add a workflow that invokes this action. A minimal example:
 
-```yaml
-name: Gitea Backporter
+   ```yaml
+   name: Gitea Backporter
 
-on:
-  push:
-    branches:
-      - main
-  pull_request_target:
-    types: [
-      opened,
-      synchronize,
-      labeled,
-      unlabeled,
-      closed,
-      review_requested,
-      review_request_removed,
-    ]
-  workflow_run:
-    workflows: [Gitea Backporter Review]
-    types: [requested]
-  schedule:
-    - cron: "15 3 * * *"
-  workflow_dispatch:
+   on:
+     push:
+       branches:
+         - main
+     pull_request_target:
+       types: [
+         opened,
+         synchronize,
+         labeled,
+         unlabeled,
+         closed,
+         review_requested,
+         review_request_removed,
+       ]
+     workflow_run:
+       workflows: [Gitea Backporter Review]
+       types: [requested]
+     schedule:
+       - cron: "15 3 * * *"
+     workflow_dispatch:
 
-jobs:
-  backporter:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: giteabot/gitea-backporter@v1
-        with:
-          github_token: ${{ secrets.BACKPORTER_GITHUB_TOKEN }}
-          gitea_fork: ${{ secrets.BACKPORTER_GITEA_FORK }}
-          checks: all
-```
+   jobs:
+     backporter:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: giteabot/gitea-backporter@v1
+           with:
+             github_token: ${{ secrets.BACKPORTER_GITHUB_TOKEN }}
+             gitea_fork: ${{ secrets.BACKPORTER_GITEA_FORK }}
+             checks: all
+   ```
 
 4. `pull_request_review` runs get a read-only token and no secrets on pull
    requests from forks, so add a second workflow that only relays reviews to the
@@ -134,22 +134,22 @@ jobs:
    triggers the relay. It must exist on every branch pull requests target,
    because review runs use the workflow from the pull request's merge ref.
 
-```yaml
-name: Gitea Backporter Review
+   ```yaml
+   name: Gitea Backporter Review
 
-on:
-  pull_request_review:
-    types: [submitted, edited, dismissed]
+   on:
+     pull_request_review:
+       types: [submitted, edited, dismissed]
 
-permissions: {}
+   permissions: {}
 
-jobs:
-  relay:
-    if: false
-    runs-on: ubuntu-latest
-    steps:
-      - run: "true"
-```
+   jobs:
+     relay:
+       if: false
+       runs-on: ubuntu-latest
+       steps:
+         - run: "true"
+   ```
 
 For a more complete example with permissions, see `examples/workflows`.
 
@@ -179,8 +179,11 @@ For example, to run only label cleanup and milestone maintenance:
 
 ## Development
 
-- `make fmt` runs the formatter
-- `make lint` runs the linter and checks formatting and types
+Requires Node.js 22.18 or newer, which runs the TypeScript sources directly,
+and [pnpm](https://pnpm.io) 12 or newer.
+
+- `make lint` runs the linter and checks types
+- `make lint-fix` fixes lint issues where possible
 - `make test` runs the tests
 
 ## Contributing

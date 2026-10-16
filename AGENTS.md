@@ -1,0 +1,15 @@
+- Never assume, verify before claiming
+- List development targets with `make help`
+- PR descriptions: minimal, only what and why, no task or file listings. Aim for less than 1000 characters
+- Reference issues and PRs by full URL, not by number
+- Use Conventional Commits for commit messages and PR titles
+- Add an `Assisted-by: AGENT_NAME:MODEL_VERSION` trailer to commit messages, never `Co-Authored-By` or `Signed-off-by`
+- Attribute agent authorship on one trailing line in issue and PR comments, never as a PR description section
+- Never rewrite git history unless asked, update PRs with new commits and normal push
+- Comments: write almost none, short and preferably same-line, explaining why for a future reader. Never narrate code, the change or the prompt. Preserve existing ones that still apply. If you need to write a paragraph-long comment, rethink your implementation, it is likely too complicated
+- In TS, use `!` instead of `?.`/`??` when a value always exists
+- Write sizes as multiplications like `64 * 1024`, not bit shifts like `64 << 10`
+- Lint what changed with `make lint`
+- Fix the cause rather than disabling a linter or weakening a test. Where unavoidable, use the narrowest scope with a trailing comment giving the reason
+- Run single tests with `pnpm exec vitest <path-filter>`
+- Write the fewest, fastest tests covering the behavior, extending an existing one where possible. Prefer unit tests where logic is testable in isolation

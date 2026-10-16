@@ -1,20 +1,16 @@
-import { addComment, closeIssue, fetchOpenIssuesWithLabel } from "./github.ts";
+import {addComment, closeIssue, fetchOpenIssuesWithLabel} from './github.ts';
 
-export const run = async () => {
+export async function closeStaleFeedbackIssues() {
   // get all issues with the label "status/needs-feedback"
-  const issues = await fetchOpenIssuesWithLabel("issue/needs-feedback");
+  const issues = await fetchOpenIssuesWithLabel('issue/needs-feedback');
   return Promise.all(issues.map(handleIssue));
-};
+}
 
 // close issue if a month has passed since it was last updated
-const handleIssue = async (issue: {
-  number: number;
-  updated_at: string;
-}) => {
-  const oneMonthAgo = (new Date(Date.now() - 1000 * 60 * 60 * 24 * 30))
-    .getTime();
-  if ((new Date(issue.updated_at)).getTime() < oneMonthAgo) {
-    console.log(`Closing issue #${issue.number} due to feedback timeout`);
+async function handleIssue(issue: {number: number; updated_at: string}) {
+  const oneMonthAgo = new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).getTime();
+  if (new Date(issue.updated_at).getTime() < oneMonthAgo) {
+    console.info(`Closing issue #${issue.number} due to feedback timeout`);
     await addComment(
       issue.number,
       `We close issues that need feedback from the author if there were no new comments for a month. :tea:`,
@@ -23,4 +19,4 @@ const handleIssue = async (issue: {
     // close issue
     await closeIssue(issue.number);
   }
-};
+}

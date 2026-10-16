@@ -1,68 +1,38 @@
-import * as SemVer from "@std/semver";
-import { fetchGiteaVersions } from "./giteaVersion.ts";
-import * as github from "./github.ts";
+import {fetchGiteaVersions} from './giteaVersion.ts';
+import {fetchUnmergedClosedWithMilestone, getMilestones, setMilestone} from './github.ts';
+import {compareVersions} from './version.ts';
 
 // given a PR number, set the milestone of the PR according to its base branch
-export const assign = async (pr: { number: number; base: { ref: string } }) => {
-  // fetch the current gitea versions
+export async function assignMilestone(pr: {number: number; base: {ref: string}}) {
   const giteaVersions = await fetchGiteaVersions();
 
-  // find the gitea version that matches the PR's base branch
-  let giteaVersion = giteaVersions.find((version) =>
-    pr.base.ref === `release/v${version.majorMinorVersion}`
-  );
-
-  // if no gitea version is found, the PR is targeting the main branch. We
-  // will use the gitea version with the highest major and minor version using
-  // Deno's semver library (gt function)
+  // main gets the highest gitea version, a release branch the version matching it
+  const giteaVersion = pr.base.ref === 'main' ?
+    giteaVersions.toSorted((a, b) => compareVersions(b.version, a.version))[0] :
+    giteaVersions.find((version) => pr.base.ref === `release/v${version.majorMinorVersion}`);
   if (!giteaVersion) {
-    giteaVersion = giteaVersions.reduce((highest, version) => {
-      if (SemVer.gt(version.semver, highest.semver)) {
-        return version;
-      }
-      return highest;
-    }, giteaVersions[0]);
-  }
-
-  const response = await github.setMilestone(
-    pr.number,
-    giteaVersion!.milestoneNumber,
-  );
-  if (!response.ok) {
-    console.error(
-      `Failed to set milestone ${giteaVersion.majorMinorVersion} for PR #${pr.number}`,
-    );
-    console.error(await response.text());
+    console.info(`No milestone matches ${pr.base.ref} for PR #${pr.number}`);
     return;
   }
-  console.log(
-    `Set milestone ${giteaVersion.majorMinorVersion} for PR #${pr.number}`,
-  );
-};
 
-export const run = async () => {
-  await removeMilestonesFromUnmergedClosedPrs();
-};
+  if (await setMilestone(pr.number, giteaVersion.milestoneNumber)) {
+    console.info(`Set milestone ${giteaVersion.majorMinorVersion} for PR #${pr.number}`);
+  }
+}
 
 // removes milestones from all PRs that are closed and unmerged
-const removeMilestonesFromUnmergedClosedPrs = async () => {
+export async function removeMilestonesFromUnmergedClosedPrs() {
   // get the current open milestones
-  const milestones = await github.getMilestones();
+  const milestones = await getMilestones();
 
   // for each milestone, fetch the PRs that are closed and included in the milestone
   // and remove the milestone each PR
-  return Promise.all(milestones.flatMap(async (m) => {
-    const prs = await github.fetchUnmergedClosedWithMilestone(m.title);
+  return Promise.all(milestones.map(async (m) => {
+    const prs = await fetchUnmergedClosedWithMilestone(m.title);
     return Promise.all(prs.items.map(async (pr) => {
-      const response = await github.removeMilestone(pr.number);
-      if (!response.ok) {
-        console.error(
-          `Failed to remove milestone from closed PR #${pr.number}`,
-        );
-        console.error(await response.text());
-        return;
+      if (await setMilestone(pr.number, null)) {
+        console.info(`Removed milestone from closed PR #${pr.number}`);
       }
-      console.log(`Removed milestone from closed PR #${pr.number}`);
     }));
   }));
-};
+}

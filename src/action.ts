@@ -1,154 +1,138 @@
-import * as backport from "./backport.ts";
-import * as labels from "./labels.ts";
-import * as mergeQueue from "./mergeQueue.ts";
-import * as milestones from "./milestones.ts";
-import * as lgtm from "./lgtm.ts";
-import * as comments from "./comments.ts";
-import * as lock from "./lock.ts";
-import * as prActions from "./prActions.ts";
-import * as feedback from "./feedback.ts";
-import * as lastCall from "./lastCall.ts";
-import { type CheckName, parseEnabledChecks } from "./config.ts";
+import {readFile} from 'node:fs/promises';
+import {createBackports} from './backport.ts';
+import {isRelevantLabel, maintainLabels} from './labels.ts';
+import {updateMergeQueue} from './mergeQueue.ts';
+import {assignMilestone, removeMilestonesFromUnmergedClosedPrs} from './milestones.ts';
+import {setPrStatusAndLabel, setPrStatusAndLabelBySha, sweepLgtmPrs} from './lgtm.ts';
+import {commentIfTranslationsChanged} from './comments.ts';
+import {lockOldIssues} from './lock.ts';
+import {executePrAction} from './prActions.ts';
+import {closeStaleFeedbackIssues} from './feedback.ts';
+import {handleLastCallPrs} from './lastCall.ts';
+import {type CheckName, parseEnabledChecks} from './config.ts';
 
 let enabledChecks: Set<CheckName>;
 try {
-  enabledChecks = parseEnabledChecks(Deno.env.get("BACKPORTER_CHECKS"));
+  enabledChecks = parseEnabledChecks(process.env.INPUT_CHECKS);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
-  Deno.exit(1);
+  process.exit(1);
 }
 
-const requiredEnv = [
-  "BACKPORTER_GITHUB_TOKEN",
-  ...(enabledChecks.has("backport") ? ["BACKPORTER_GITEA_FORK"] : []),
-];
-const missingEnv = requiredEnv.filter((name) => !Deno.env.get(name));
-if (missingEnv.length > 0) {
-  console.error(`Missing required env vars: ${missingEnv.join(", ")}`);
-  Deno.exit(1);
+const requiredInputs = ['github_token', ...(enabledChecks.has('backport') ? ['gitea_fork'] : [])];
+const missingInputs = requiredInputs.filter((name) => !process.env[`INPUT_${name.toUpperCase()}`]);
+if (missingInputs.length > 0) {
+  console.error(`Missing required inputs: ${missingInputs.join(', ')}`);
+  process.exit(1);
 }
 
-const shouldRunCheck = (checkName: CheckName) => enabledChecks.has(checkName);
-
-const runCheck = async (
-  checkName: CheckName,
-  callback: () => unknown,
-) => {
-  if (!shouldRunCheck(checkName)) {
+// a failed check fails the run without skipping the checks after it
+async function runCheck(checkName: CheckName, callback: () => unknown) {
+  if (!enabledChecks.has(checkName)) {
     console.info(`Skipping ${checkName} check`);
     return;
   }
-  await callback();
-};
-
-const eventName = Deno.env.get("GITHUB_EVENT_NAME");
-const eventPath = Deno.env.get("GITHUB_EVENT_PATH");
-
-if (!eventName || !eventPath) {
-  console.error("GITHUB_EVENT_NAME and GITHUB_EVENT_PATH must be set");
-  Deno.exit(1);
+  try {
+    await callback();
+  } catch (error) {
+    console.error(`${checkName} check failed:`, error);
+    process.exitCode = 1;
+  }
 }
 
-const payloadText = await Deno.readTextFile(eventPath);
+const eventName = process.env.GITHUB_EVENT_NAME;
+const eventPath = process.env.GITHUB_EVENT_PATH;
+
+if (!eventName || !eventPath) {
+  console.error('GITHUB_EVENT_NAME and GITHUB_EVENT_PATH must be set');
+  process.exit(1);
+}
+
+const payloadText = await readFile(eventPath, 'utf8');
 const payload = JSON.parse(payloadText);
 
-const runMaintenance = async () => {
-  await runCheck("labels", () => labels.run());
-  await runCheck("merge_queue", () => mergeQueue.run());
-  await runCheck("lock", () => lock.run());
-  await runCheck("feedback", () => feedback.run());
-  await runCheck("last_call", () => lastCall.run());
-  await runCheck("milestones", () => milestones.run());
-  await runCheck("lgtm", () => lgtm.run());
-};
+async function runMaintenance() {
+  await runCheck('labels', maintainLabels);
+  await runCheck('merge_queue', updateMergeQueue);
+  await runCheck('lock', lockOldIssues);
+  await runCheck('feedback', closeStaleFeedbackIssues);
+  await runCheck('last_call', handleLastCallPrs);
+  await runCheck('milestones', removeMilestonesFromUnmergedClosedPrs);
+  await runCheck('lgtm', sweepLgtmPrs);
+}
 
-const handlePullRequest = async (
-  action: string,
-  pr: typeof payload.pull_request,
-) => {
-  if (action === "labeled" || action === "unlabeled") {
+async function handlePullRequest(action: string, pr: typeof payload.pull_request) {
+  if (action === 'labeled' || action === 'unlabeled') {
     const labelName = payload.label?.name;
-    if (labelName && labels.isRelevantLabel(labelName)) {
-      await runCheck("labels", () => labels.run());
-      await runCheck("merge_queue", () => mergeQueue.run());
-      await runCheck("pr_actions", () => prActions.run(labelName, pr));
+    if (labelName && isRelevantLabel(labelName)) {
+      await runCheck('labels', maintainLabels);
+      await runCheck('merge_queue', updateMergeQueue);
+      await runCheck('pr_actions', () => executePrAction(labelName, pr));
     }
     return;
   }
 
-  if (action === "opened") {
-    await runCheck("labels", () => labels.run());
-    if (pr?.base?.ref === "main") {
-      await runCheck(
-        "translation_comment",
-        () => comments.commentIfTranslationsChanged(pr),
-      );
+  if (action === 'opened') {
+    await runCheck('labels', maintainLabels);
+    if (pr.base.ref === 'main') {
+      await runCheck('translation_comment', () => commentIfTranslationsChanged(pr));
     }
-    if (pr?.base?.ref?.startsWith("release/")) {
-      await runCheck("milestones", () => milestones.assign(pr));
+    if (pr.base.ref.startsWith('release/')) {
+      await runCheck('milestones', () => assignMilestone(pr));
     }
   }
 
   if (
-    action === "opened" ||
-    action === "synchronize" ||
-    action === "review_requested" ||
-    action === "review_request_removed"
+    action === 'opened' ||
+    action === 'synchronize' ||
+    action === 'review_requested' ||
+    action === 'review_request_removed'
   ) {
-    await runCheck("lgtm", () => lgtm.setPrStatusAndLabel(pr));
-  }
-
-  if (action === "closed") {
-    if (pr?.merged && !pr?.milestone && shouldRunCheck("milestones")) {
-      await milestones.assign(pr);
+    await runCheck('lgtm', () => setPrStatusAndLabel(pr));
+  } else if (action === 'closed') {
+    if (pr.merged && !pr.milestone) {
+      await runCheck('milestones', () => assignMilestone(pr));
     }
-    await runCheck("milestones", () => milestones.run());
+    await runCheck('milestones', removeMilestonesFromUnmergedClosedPrs);
   }
-};
+}
 
 switch (eventName) {
-  case "push": {
-    if (payload.ref === "refs/heads/main" && shouldRunCheck("backport")) {
-      await backport.run();
+  case 'push': {
+    if (payload.ref === 'refs/heads/main') {
+      await runCheck('backport', createBackports);
     }
     await runMaintenance();
     break;
   }
-  case "pull_request":
-  case "pull_request_target": {
+  case 'pull_request':
+  case 'pull_request_target': {
     await handlePullRequest(payload.action, payload.pull_request);
     // reviews the workflow_run relay misses, e.g. on conflicting PRs without a
     // merge ref, get reconciled on these frequent trusted events: recompute PRs
     // touched in the last hour (the daily maintenance sweep is the backstop). Skip
     // labeled/unlabeled: the bot's own lgtm label writes fire those and would
     // re-trigger the reconcile.
-    const isLabelEvent = payload.action === "labeled" ||
-      payload.action === "unlabeled";
-    if (eventName === "pull_request_target" && !isLabelEvent) {
-      await runCheck("lgtm", () => lgtm.run(Date.now() - 1000 * 60 * 60));
+    const isLabelEvent = payload.action === 'labeled' || payload.action === 'unlabeled';
+    if (eventName === 'pull_request_target' && !isLabelEvent) {
+      await runCheck('lgtm', () => sweepLgtmPrs(Date.now() - 1000 * 60 * 60));
     }
     break;
   }
-  case "pull_request_review": {
-    await runCheck(
-      "lgtm",
-      () => lgtm.setPrStatusAndLabel(payload.pull_request),
-    );
+  case 'pull_request_review': {
+    await runCheck('lgtm', () => setPrStatusAndLabel(payload.pull_request));
     break;
   }
   // pull_request_review gets a read-only token on fork PRs, so a review workflow triggers this writable run
-  case "workflow_run": {
-    await runCheck(
-      "lgtm",
-      () => lgtm.setPrStatusAndLabelBySha(payload.workflow_run.head_sha),
-    );
+  case 'workflow_run': {
+    await runCheck('lgtm', () => setPrStatusAndLabelBySha(payload.workflow_run.head_sha));
     break;
   }
-  case "schedule":
-  case "workflow_dispatch": {
+  case 'schedule':
+  case 'workflow_dispatch': {
     await runMaintenance();
     break;
   }
   default:
-    console.log(`No handlers for ${eventName}`);
+    console.info(`No handlers for ${eventName}`);
 }

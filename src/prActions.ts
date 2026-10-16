@@ -1,11 +1,7 @@
-import { addComment, needsUpdate, removeLabel, updatePr } from "./github.ts";
-import { debounce } from "@std/async";
+import {addComment, needsUpdate, readText, removeLabel, updatePr} from './github.ts';
 
-const execute = async (
-  label: string,
-  pr: { number: number; user: { login: string } },
-) => {
-  if (label === "giteabot/update-branch") {
+export async function executePrAction(label: string, pr: {number: number; user: {login: string}}) {
+  if (label === 'giteabot/update-branch') {
     const err = await updateBranch(pr);
     if (err) {
       await addComment(
@@ -14,46 +10,35 @@ const execute = async (
       );
       return;
     }
-    await removeLabel(pr.number, "giteabot/update-branch");
+    await removeLabel(pr.number, 'giteabot/update-branch');
   }
-};
+}
 
-export const updateBranch = async (
-  pr: { number: number; user: { login: string } },
-) => {
+export async function updateBranch(pr: {number: number; user: {login: string}}): Promise<Error | undefined> {
   if (await needsUpdate(pr.number)) {
     const response = await updatePr(pr.number);
     if (response.ok) {
       console.info(`Synced PR #${pr.number}`);
-      return;
+      return undefined;
     }
 
-    const text = await response.text().catch(() => "");
-    let body: { message?: string } | null = null;
+    const text = await readText(response);
+    let body: {message?: string} | null = null;
     try {
       body = JSON.parse(text);
     } catch {
       // non-JSON body, e.g. an HTML error page
     }
-    if (body?.message !== "merge conflict between base and head") {
-      console.error(
-        `Failed to sync PR #${pr.number}`,
-      );
+    if (body?.message !== 'merge conflict between base and head') {
+      console.error(`Failed to sync PR #${pr.number}`);
       console.error(text);
-      return Error(body?.message ?? `HTTP ${response.status}`);
+      return new Error(body?.message ?? `HTTP ${response.status}`);
     }
 
-    console.info(
-      `Merge conflict detected in PR #${pr.number}`,
-    );
+    console.info(`Merge conflict detected in PR #${pr.number}`);
     // if there is a merge conflict, we'll add a comment to fix the conflicts
-    await addComment(
-      pr.number,
-      `@${pr.user.login} please fix the merge conflicts. :tea:`,
-    );
-    return Error("merge conflicts in PR");
+    await addComment(pr.number, `@${pr.user.login} please fix the merge conflicts. :tea:`);
+    return new Error('merge conflicts in PR');
   }
-};
-
-// make sure we don't trigger too often
-export const run = debounce(execute, 8000);
+  return undefined;
+}

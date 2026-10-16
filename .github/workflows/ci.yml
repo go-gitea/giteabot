@@ -1,8 +1,12 @@
+name: ci
 on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,11 +15,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-      - uses: denoland/setup-deno@11b63cf76cfcafb4e43f97b6cad24d8e8438f62d # v1.5.2
-      - run: make lint
-      - run: make test
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          cache: pnpm
+          node-version: 24
+      - run: make lint test
         env:
-          BACKPORTER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BACKPORTER_GITEA_FORK: GiteaBot/gitea
+          INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_GITEA_FORK: GiteaBot/gitea
           BACKPORTER_REPO: go-gitea/gitea

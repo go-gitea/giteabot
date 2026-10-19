@@ -1,6 +1,29 @@
 import {fetchGiteaVersions} from './giteaVersion.ts';
-import {fetchUnmergedClosedWithMilestone, getMilestones, setMilestone} from './github.ts';
+import {
+  closeMilestone,
+  createMilestone,
+  fetchOpenPrsInMilestone,
+  fetchUnmergedClosedWithMilestone,
+  fetchVersionMilestones,
+  getMilestones,
+  setMilestone,
+  tagExists,
+} from './github.ts';
 import {compareVersions} from './version.ts';
+
+export async function rolloverReleasedMilestones() {
+  const milestones = (await fetchVersionMilestones()).toSorted((a, b) => compareVersions(a.version, b.version));
+  for (const milestone of milestones) {
+    if (!await tagExists(`v${milestone.title}`)) continue;
+    const nextTitle = `${milestone.version.major}.${milestone.version.minor + 1}.0`;
+    const nextNumber = milestones.find((other) => other.title === nextTitle)?.number ?? await createMilestone(nextTitle);
+    const prs = await fetchOpenPrsInMilestone(milestone.number);
+    const moved = await Promise.all(prs.map((pr) => setMilestone(pr.number, nextNumber)));
+    if (moved.every(Boolean) && await closeMilestone(milestone.number)) {
+      console.info(`Closed milestone ${milestone.title}, moved ${prs.length} open PRs to ${nextTitle}`);
+    }
+  }
+}
 
 // given a PR number, set the milestone of the PR according to its base branch
 export async function assignMilestone(pr: {number: number; base: {ref: string}}) {

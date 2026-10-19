@@ -44,6 +44,10 @@ its target branch (except pull requests targeting `main`, we'll assign those on
 merge). The script makes sure that unmerged closed pull requests are not
 included in any milestone.
 
+Once a milestone's version is tagged (e.g. `v28.2.0`), the script closes the
+milestone and moves its open pull requests to the next minor version's
+milestone (`28.3.0`), creating that milestone if it doesn't exist.
+
 ### LGTM
 
 The script will maintain each pull request's LGTM count. It will add the

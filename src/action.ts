@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {createBackports} from './backport.ts';
 import {isRelevantLabel, maintainLabels} from './labels.ts';
 import {updateMergeQueue} from './mergeQueue.ts';
-import {assignMilestone, removeMilestonesFromUnmergedClosedPrs} from './milestones.ts';
+import {assignMilestone, removeMilestonesFromUnmergedClosedPrs, rolloverReleasedMilestones} from './milestones.ts';
 import {setPrStatusAndLabel, setPrStatusAndLabelBySha, sweepLgtmPrs} from './lgtm.ts';
 import {commentIfTranslationsChanged} from './comments.ts';
 import {lockOldIssues} from './lock.ts';
@@ -58,6 +58,7 @@ async function runMaintenance() {
   await runCheck('feedback', closeStaleFeedbackIssues);
   await runCheck('last_call', handleLastCallPrs);
   await runCheck('milestones', removeMilestonesFromUnmergedClosedPrs);
+  await runCheck('milestones', rolloverReleasedMilestones);
   await runCheck('lgtm', sweepLgtmPrs);
 }
 
@@ -78,7 +79,10 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
       await runCheck('translation_comment', () => commentIfTranslationsChanged(pr));
     }
     if (pr.base.ref.startsWith('release/')) {
-      await runCheck('milestones', () => assignMilestone(pr));
+      await runCheck('milestones', async () => { // a failed rollover may mean a concurrent run is closing the milestone
+        await rolloverReleasedMilestones();
+        await assignMilestone(pr);
+      });
     }
   }
 

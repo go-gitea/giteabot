@@ -294,7 +294,7 @@ export async function backportPrExists(pr: {number: number}, giteaMajorMinorVers
   }
 
   const searchResults = await fetchSearchResults<{number: number}>(
-    `is:pr is:open repo:${TARGET_REPO} base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`,
+    `is:pr repo:${TARGET_REPO} base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`, // any state, so merged backports don't need their fork branch
   );
   if (searchResults.total_count > 0) {
     backportPrExistsCache.add(cacheKey);

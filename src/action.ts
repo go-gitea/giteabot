@@ -79,10 +79,7 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
       await runCheck('translation_comment', () => commentIfTranslationsChanged(pr));
     }
     if (pr.base.ref.startsWith('release/')) {
-      await runCheck('milestones', async () => { // a failed rollover may mean a concurrent run is closing the milestone
-        await rolloverReleasedMilestones();
-        await assignMilestone(pr);
-      });
+      await runCheck('milestones', () => assignMilestone(pr));
     }
   }
 

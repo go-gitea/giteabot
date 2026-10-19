@@ -44,9 +44,12 @@ its target branch (except pull requests targeting `main`, we'll assign those on
 merge). The script makes sure that unmerged closed pull requests are not
 included in any milestone.
 
-Once a milestone's version is tagged (e.g. `v28.2.0`), the script closes the
-milestone and moves its open pull requests to the next minor version's
-milestone (`28.3.0`), creating that milestone if it doesn't exist.
+Once a release branch is cut (e.g. `release/v29`), the script creates the next
+major version's milestone (`30.0.0`) for `main`. Once a milestone's version is
+tagged (e.g. `v29.0.0`), the script closes the milestone, creates the next minor
+version's milestone (`29.1.0`) and moves its open pull requests by target
+branch: those targeting `main` to the highest milestone, those targeting a
+release branch to the earliest milestone of its version.
 
 ### LGTM
 

@@ -1,45 +1,66 @@
-import {fetchGiteaVersions} from './giteaVersion.ts';
 import {
+  branchExists,
   closeMilestone,
   createMilestone,
   fetchOpenPrsInMilestone,
+  fetchPr,
   fetchUnmergedClosedWithMilestone,
   fetchVersionMilestones,
   getMilestones,
   setMilestone,
   tagExists,
+  type VersionMilestone,
 } from './github.ts';
-import {compareVersions} from './version.ts';
+import {compareVersions, releaseVersion} from './version.ts';
 
+const byVersion = (a: VersionMilestone, b: VersionMilestone) => compareVersions(a.version, b.version);
+
+// main gets the highest milestone, a release branch the earliest one of its version
+function milestoneForBranch(milestones: VersionMilestone[], ref: string) {
+  const sorted = milestones.toSorted(byVersion);
+  return ref === 'main' ? sorted.at(-1) : sorted.find((milestone) => ref === `release/v${releaseVersion(milestone.version)}`);
+}
+
+async function addMilestone(milestones: VersionMilestone[], major: number, minor: number) {
+  const title = `${major}.${minor}.0`;
+  if (milestones.some((milestone) => milestone.title === title)) return;
+  milestones.push({title, number: await createMilestone(title), version: {major, minor, patch: 0}});
+}
+
+// returns the open milestones after the rollover
 export async function rolloverReleasedMilestones() {
-  const milestones = (await fetchVersionMilestones()).toSorted((a, b) => compareVersions(a.version, b.version));
-  for (const milestone of milestones) {
+  const milestones = await fetchVersionMilestones();
+  const sorted = milestones.toSorted(byVersion);
+  const highest = sorted.at(-1);
+  if (highest && await branchExists(`release/v${releaseVersion(highest.version)}`)) { // main moved on to the next major
+    await addMilestone(milestones, highest.version.major + 1, 0);
+  }
+  for (const milestone of sorted) {
     if (!await tagExists(`v${milestone.title}`)) continue;
-    const nextTitle = `${milestone.version.major}.${milestone.version.minor + 1}.0`;
-    const nextNumber = milestones.find((other) => other.title === nextTitle)?.number ?? await createMilestone(nextTitle);
-    const prs = await fetchOpenPrsInMilestone(milestone.number);
-    const moved = await Promise.all(prs.map((pr) => setMilestone(pr.number, nextNumber)));
-    if (moved.every(Boolean) && await closeMilestone(milestone.number)) {
-      console.info(`Closed milestone ${milestone.title}, moved ${prs.length} open PRs to ${nextTitle}`);
+    milestones.splice(milestones.indexOf(milestone), 1);
+    await addMilestone(milestones, milestone.version.major, milestone.version.minor + 1);
+    let allMoved = true;
+    for (const {number} of await fetchOpenPrsInMilestone(milestone.number)) { // serial, concurrent writes hit secondary rate limits
+      const target = milestoneForBranch(milestones, (await fetchPr(number)).base.ref);
+      if (target && !await setMilestone(number, target.number)) allMoved = false;
+    }
+    if (allMoved && await closeMilestone(milestone.number)) {
+      console.info(`Closed milestone ${milestone.title}`);
     }
   }
+  return milestones;
 }
 
 // given a PR number, set the milestone of the PR according to its base branch
 export async function assignMilestone(pr: {number: number; base: {ref: string}}) {
-  const giteaVersions = await fetchGiteaVersions();
-
-  // main gets the highest gitea version, a release branch the version matching it
-  const giteaVersion = pr.base.ref === 'main' ?
-    giteaVersions.toSorted((a, b) => compareVersions(b.version, a.version))[0] :
-    giteaVersions.find((version) => pr.base.ref === `release/v${version.majorMinorVersion}`);
-  if (!giteaVersion) {
+  const milestone = milestoneForBranch(await rolloverReleasedMilestones(), pr.base.ref); // never assign a released milestone
+  if (!milestone) {
     console.info(`No milestone matches ${pr.base.ref} for PR #${pr.number}`);
     return;
   }
 
-  if (await setMilestone(pr.number, giteaVersion.milestoneNumber)) {
-    console.info(`Set milestone ${giteaVersion.majorMinorVersion} for PR #${pr.number}`);
+  if (await setMilestone(pr.number, milestone.number)) {
+    console.info(`Set milestone ${milestone.title} for PR #${pr.number}`);
   }
 }
 

@@ -320,8 +320,9 @@ export async function backportPrExists(pr: {number: number}, giteaMajorMinorVers
 }
 
 type Milestone = {title: string; number: number};
+export type VersionMilestone = Milestone & {version: Version};
 
-export async function fetchVersionMilestones() {
+export async function fetchVersionMilestones(): Promise<VersionMilestone[]> {
   const milestones = await fetchList<Milestone>(`/repos/${TARGET_REPO}/milestones?per_page=100`);
   return milestones.flatMap((milestone) => {
     const version = parseVersion(milestone.title);
@@ -332,7 +333,7 @@ export async function fetchVersionMilestones() {
 // get Gitea milestones
 export async function getMilestones() {
   // take only the earliest version of each release branch (e.g. 1.19.0, 1.19.1 -> 1.19.0 and 28.0.0, 28.1.0 -> 28.0.0)
-  const earliestPatchVersions: Record<string, Milestone & {version: Version}> = {};
+  const earliestPatchVersions: Record<string, VersionMilestone> = {};
   for (const milestone of await fetchVersionMilestones()) {
     const key = releaseVersion(milestone.version);
     if (!earliestPatchVersions[key] || compareVersions(milestone.version, earliestPatchVersions[key].version) < 0) {
@@ -343,10 +344,16 @@ export async function getMilestones() {
 }
 
 export async function createMilestone(title: string) {
-  const {json} = await fetchJSON<Milestone>(`${GITHUB_API}/repos/${TARGET_REPO}/milestones`, `GitHub create milestone ${title}`, {
+  const label = `GitHub create milestone ${title}`;
+  const response = await fetchWithRetry(`${GITHUB_API}/repos/${TARGET_REPO}/milestones`, label, {
     method: 'POST',
     body: JSON.stringify({title}),
   });
+  if (!response.ok) { // a concurrent run may have created it
+    const existing = (await fetchVersionMilestones()).find((milestone) => milestone.title === title);
+    if (existing) return existing.number;
+  }
+  const json: Milestone = await parseJSON(response, label);
   return json.number;
 }
 

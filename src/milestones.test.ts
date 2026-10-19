@@ -32,10 +32,7 @@ test('rolloverReleasedMilestones() opens the next major once its release branch 
     }
     if (path === '/issues') return Response.json(prsByMilestone[searchParams.get('milestone')!] ?? []);
     if (path === '/search/issues') return Response.json({items: searchParams.get('q')!.includes('milestone:29.0.0') ? [{number: 23}] : []});
-    if (path.startsWith('/pulls/')) {
-      const number = Number(path.split('/').at(-1));
-      return Response.json({number, base: {ref: baseByPr[number]}});
-    }
+    if (path.startsWith('/pulls/')) return Response.json({base: {ref: baseByPr[path.split('/').at(-1)!]}});
     return Response.json(milestones);
   });
   const open = await rolloverReleasedMilestones();

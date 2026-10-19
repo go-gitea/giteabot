@@ -21,7 +21,6 @@ function milestoneForBranch(milestones: VersionMilestone[], ref: string) {
   return ref === 'main' ? sorted.at(-1) : sorted.find((milestone) => ref === `release/v${releaseVersion(milestone.version)}`);
 }
 
-// opens a milestone for the first untagged version from major.minor.0 on, unless one is open
 async function addMilestone(milestones: VersionMilestone[], major: number, minor: number) {
   for (let next = minor; ; next++) {
     const title = `${major}.${next}.0`;
@@ -40,7 +39,6 @@ async function removeMilestoneFromUnmergedClosedPrs(title: string) {
   }
 }
 
-// returns the open milestones after the rollover
 export async function rolloverReleasedMilestones() {
   const milestones = await fetchVersionMilestones();
   const sorted = milestones.toSorted(byVersion);

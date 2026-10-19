@@ -245,6 +245,12 @@ export async function branchExists(branch: string) {
   return true;
 }
 
+export function deleteBranch(repo: string, branch: string) {
+  return mutate(`${GITHUB_API}/repos/${repo}/git/refs/heads/${branch}`, `GitHub delete branch ${branch} of ${repo}`, {
+    method: 'DELETE',
+  });
+}
+
 // checks if the given PR needs to be updated
 export async function needsUpdate(prNumber: number) {
   // get the PR and check if its base sha is the same as its base branch

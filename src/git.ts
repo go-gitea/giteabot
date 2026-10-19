@@ -7,6 +7,8 @@ import {TARGET_REPO_GIT} from './config.ts';
 export const getPrBranchName = (prNumber: number, giteaMajorMinorVersion: string) =>
   `backport-${prNumber}-v${giteaMajorMinorVersion}`;
 
+export const isPrBranchName = (branch: string) => /^backport-\d+-v[\d.]+$/.test(branch);
+
 let repoDir = '';
 
 async function git(args: string[]) {

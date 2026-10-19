@@ -1,4 +1,4 @@
-import {cherryPickPr, getPrBranchName, initializeGitRepo} from './git.ts';
+import {cherryPickPr, getPrBranchName, initializeGitRepo, isPrBranchName} from './git.ts';
 import {fetchGiteaVersions, type GiteaVersion} from './giteaVersion.ts';
 import {
   addComment,
@@ -6,11 +6,20 @@ import {
   backportPrExists,
   branchExists,
   createBackportPr,
+  deleteBranch,
   fetchCandidates,
   fetchCurrentUser,
   fetchPr,
 } from './github.ts';
 import type {Issue} from './types.ts';
+
+// GitHub only auto-deletes a fork branch when the merger can write to the fork
+export async function deleteBackportBranch(pr: {head: {ref: string; repo: {full_name: string; owner: {login: string}} | null}}) {
+  if (!isPrBranchName(pr.head.ref) || pr.head.repo?.owner.login !== (await fetchCurrentUser()).login) return;
+  if (await deleteBranch(pr.head.repo.full_name, pr.head.ref)) {
+    console.info(`Deleted branch ${pr.head.ref} of merged backport`);
+  }
+}
 
 export async function createBackports() {
   const user = await fetchCurrentUser();

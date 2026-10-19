@@ -19,6 +19,10 @@ versions (`28`). If the cherry-pick is successful, it will push the branch to
 the remote and create a pull request with the labels from the original pull
 request.
 
+Once a backport pull request is merged, the `backport_branches` check deletes
+its branch from the bot's fork. GitHub only does this automatically when the
+person merging can write to the fork.
+
 ### Label maintenance
 
 The script will also look for merged pull requests that have the labels
@@ -157,6 +161,7 @@ The optional `checks` input controls which bot checks run in a workflow. It
 accepts `all`, `none`, or a comma-separated list from:
 
 - `backport`
+- `backport_branches`
 - `labels`
 - `merge_queue`
 - `lock`

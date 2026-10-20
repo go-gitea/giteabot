@@ -1,5 +1,5 @@
 import {readFile} from 'node:fs/promises';
-import {createBackports} from './backport.ts';
+import {createBackports, deleteBackportBranch} from './backport.ts';
 import {isRelevantLabel, maintainLabels} from './labels.ts';
 import {updateMergeQueue} from './mergeQueue.ts';
 import {assignMilestone, removeMilestonesFromUnmergedClosedPrs, rolloverReleasedMilestones} from './milestones.ts';
@@ -95,6 +95,9 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
       await runCheck('milestones', () => assignMilestone(pr));
     }
     await runCheck('milestones', removeMilestonesFromUnmergedClosedPrs);
+    if (pr.merged) {
+      await runCheck('backport_branches', () => deleteBackportBranch(pr));
+    }
   }
 }
 

@@ -249,6 +249,12 @@ export const branchExists = (branch: string) => repoPathExists(`branches/${branc
 
 export const tagExists = (tag: string) => repoPathExists(`git/ref/tags/${tag}`, `GitHub tag ${tag}`);
 
+export function deleteBranch(repo: string, branch: string) {
+  return mutate(`${GITHUB_API}/repos/${repo}/git/refs/heads/${branch}`, `GitHub delete branch ${branch} of ${repo}`, {
+    method: 'DELETE',
+  });
+}
+
 // checks if the given PR needs to be updated
 export async function needsUpdate(prNumber: number) {
   // get the PR and check if its base sha is the same as its base branch
@@ -298,7 +304,7 @@ export async function backportPrExists(pr: {number: number}, giteaMajorMinorVers
   }
 
   const searchResults = await fetchSearchResults<{number: number}>(
-    `is:pr is:open repo:${TARGET_REPO} base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`,
+    `is:pr repo:${TARGET_REPO} base:release/v${giteaMajorMinorVersion} ${pr.number} in:title`, // any state, so merged backports don't need their fork branch
   );
   if (searchResults.total_count > 0) {
     backportPrExistsCache.add(cacheKey);

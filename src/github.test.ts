@@ -143,6 +143,13 @@ test('hasCommentsSince() only counts comments created after the given date', asy
   expect(await hasCommentsSince(24147, new Date('2023-04-18T16:57:30Z'))).toEqual(false);
 });
 
+test('backportPrExists() counts a merged backport PR whose fork branch is deleted', async () => {
+  vi.stubGlobal('fetch', (url: string) => Promise.resolve(url.includes('/search/issues') ?
+    Response.json({total_count: decodeURIComponent(url).includes('is:open') ? 0 : 1}) :
+    new Response(null, {status: 404})));
+  expect(await backportPrExists({number: 1}, '28')).toBe(true);
+});
+
 test('backportPrExists() returns the appropriate result', async () => {
   const prAndVersionToBackportExists = {
     '30511_1.22': true,

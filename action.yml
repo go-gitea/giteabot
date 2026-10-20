@@ -9,7 +9,7 @@ inputs:
     description: Fork of go-gitea/gitea used to push backport branches (owner/repo); required when the backport check is enabled
     required: false
   checks:
-    description: Comma-separated list of checks to run. Use all or none, or select from backport, labels, merge_queue, lock, feedback, last_call, milestones, lgtm, translation_comment, pr_actions.
+    description: Comma-separated list of checks to run. Use all or none, or select from backport, backport_branches, labels, merge_queue, lock, feedback, last_call, milestones, lgtm, translation_comment, pr_actions.
     required: false
     default: all
 runs:

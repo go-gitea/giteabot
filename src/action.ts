@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {createBackports} from './backport.ts';
 import {isRelevantLabel, maintainLabels} from './labels.ts';
 import {updateMergeQueue} from './mergeQueue.ts';
-import {assignMilestone, removeMilestonesFromUnmergedClosedPrs} from './milestones.ts';
+import {assignMilestone, removeMilestonesFromUnmergedClosedPrs, rolloverReleasedMilestones} from './milestones.ts';
 import {setPrStatusAndLabel, setPrStatusAndLabelBySha, sweepLgtmPrs} from './lgtm.ts';
 import {commentIfTranslationsChanged} from './comments.ts';
 import {lockOldIssues} from './lock.ts';
@@ -58,6 +58,7 @@ async function runMaintenance() {
   await runCheck('feedback', closeStaleFeedbackIssues);
   await runCheck('last_call', handleLastCallPrs);
   await runCheck('milestones', removeMilestonesFromUnmergedClosedPrs);
+  await runCheck('milestones', rolloverReleasedMilestones);
   await runCheck('lgtm', sweepLgtmPrs);
 }
 

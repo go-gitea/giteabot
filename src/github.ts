@@ -150,6 +150,7 @@ export function fetchCandidates(giteaMajorMinorVersion: string) {
 
 type ListIssue = {
   number: number;
+  state: 'open' | 'closed';
   title: string;
   updated_at: string;
   user: {login: string};
@@ -174,11 +175,20 @@ export const fetchOpenIssuesWithLabel = async (label: string) =>
 export const fetchOpenPrsWithLabel = async (label: string) =>
   (await fetchIssuesByLabel('open', label)).filter((item) => item.pull_request);
 
-export const fetchMilestoneIssues = (milestone: number, state: 'open' | 'all') =>
-  fetchList<ListIssue>(`/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&milestone=${milestone}`);
+export const fetchMilestoneIssues = (milestone: number) =>
+  fetchList<ListIssue>(`/repos/${TARGET_REPO}/issues?per_page=100&state=all&milestone=${milestone}`);
 
-export const fetchOpenPrsInMilestone = async (milestone: number) =>
-  (await fetchMilestoneIssues(milestone, 'open')).filter((item) => item.pull_request);
+export async function fetchPrsAfterTag(tag: string, branch: string) {
+  const {json} = await fetchJSON<{commits: {sha: string}[]}>(
+    `${GITHUB_API}/repos/${TARGET_REPO}/compare/${tag}...${branch}`,
+    `GitHub compare ${tag}...${branch}`,
+  );
+  const prs = new Set<number>();
+  for (const {sha} of json.commits) {
+    for (const {number} of await fetchList<{number: number}>(`/repos/${TARGET_REPO}/commits/${sha}/pulls`)) prs.add(number);
+  }
+  return prs;
+}
 
 // returns a list of PRs pending merge (have the label reviewed/wait-merge)
 export const fetchPendingMerge = async () =>

@@ -1,6 +1,6 @@
 import {assignMilestone, rolloverReleasedMilestones} from './milestones.ts';
 
-test('rolloverReleasedMilestones() migrates predicted versions to line milestones, releases them as untracked tags and moves open PRs serially', async () => {
+test('rolloverReleasedMilestones() migrates predicted versions to line milestones, releases them as untracked tags and serially moves open PRs and PRs merged after the tag', async () => {
   const requests: string[] = [];
   const milestones = [
     {title: '1.26.5', number: 1, state: 'open'},
@@ -12,12 +12,12 @@ test('rolloverReleasedMilestones() migrates predicted versions to line milestone
     {title: '29.x', number: 14, state: 'closed'},
   ];
   const tags = ['v1.26.4', 'v1.27.4', 'v1.27.5', 'v29.0.0'];
-  const issuesByMilestone: Record<string, {number: number; pull_request?: object}[]> = {
+  const issuesByMilestone: Record<string, {number: number; state?: string; pull_request?: object}[]> = {
     2: [{number: 30}, {number: 31, pull_request: {}}],
-    3: [{number: 10, pull_request: {}}],
-    4: [{number: 20, pull_request: {}}, {number: 21, pull_request: {}}, {number: 22}],
+    3: [{number: 10, state: 'open', pull_request: {}}, {number: 11, state: 'closed', pull_request: {}}, {number: 12, state: 'closed', pull_request: {}}],
+    4: [{number: 20, state: 'open', pull_request: {}}, {number: 21, state: 'open', pull_request: {}}, {number: 22, state: 'open'}],
   };
-  const baseByPr: Record<string, string> = {10: 'release/v1.27', 20: 'main', 21: 'release/v29'};
+  const baseByPr: Record<string, string> = {10: 'release/v1.27', 11: 'release/v1.27', 20: 'main', 21: 'release/v29'};
   let nextNumber = 7;
   let inFlight = 0;
   let maxInFlight = 0;
@@ -34,6 +34,8 @@ test('rolloverReleasedMilestones() migrates predicted versions to line milestone
       return Response.json(method === 'POST' ? {number: nextNumber++} : {});
     }
     if (path === '/git/matching-refs/tags/v') return Response.json(tags.map((tag) => ({ref: `refs/tags/${tag}`})));
+    if (path.startsWith('/compare/')) return Response.json({commits: path === '/compare/v1.27.5...release/v1.27' ? [{sha: 'abc'}] : []});
+    if (path === '/commits/abc/pulls') return Response.json([{number: 11}]);
     if (path === '/issues') return Response.json(issuesByMilestone[searchParams.get('milestone')!] ?? []);
     if (path === '/search/issues') return Response.json({items: searchParams.get('q')!.includes('milestone:1.27.x') ? [{number: 23}] : []});
     if (path.startsWith('/pulls/')) return Response.json({base: {ref: baseByPr[path.split('/').at(-1)!]}});
@@ -50,6 +52,7 @@ test('rolloverReleasedMilestones() migrates predicted versions to line milestone
     'PATCH /milestones/3 {"title":"1.27.5"}',
     'POST /milestones {"title":"1.27.x"}',
     'PATCH /issues/10 {"milestone":8}',
+    'PATCH /issues/11 {"milestone":8}',
     'PATCH /milestones/3 {"state":"closed"}',
     'POST /milestones {"title":"29.x"}',
     'PATCH /milestones/14 {"state":"open"}',
@@ -61,10 +64,11 @@ test('rolloverReleasedMilestones() migrates predicted versions to line milestone
   expect(maxInFlight).toBe(1);
 });
 
-test('assignMilestone() maps release branches to their earliest milestone and main to the highest, even when the rollover fails', async () => {
+test('assignMilestone() maps release branches to their earliest milestone, creating a missing line milestone, and main to the highest, even when the rollover fails', async () => {
   const assigned: number[] = [];
   vi.stubGlobal('fetch', (_url: string, {method, body}: {method?: string; body: string}) => {
     if (method === 'HEAD') return Promise.resolve(new Response(null, {status: 403}));
+    if (method === 'POST') return Promise.resolve(Response.json({number: 5}));
     if (method === 'PATCH') {
       assigned.push(JSON.parse(body).milestone);
       return Promise.resolve(Response.json({}));
@@ -76,8 +80,8 @@ test('assignMilestone() maps release branches to their earliest milestone and ma
       {title: '29.0.0', number: 4, state: 'open'},
     ]));
   });
-  for (const ref of ['release/v1.27', 'release/v28', 'main', 'release/v1.26']) {
+  for (const ref of ['release/v1.27', 'release/v28', 'main', 'release/v1.26', 'feature']) {
     await assignMilestone({number: 1, base: {ref}});
   }
-  expect(assigned).toEqual([1, 3, 4]);
+  expect(assigned).toEqual([1, 3, 4, 5]);
 });

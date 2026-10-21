@@ -3,8 +3,8 @@ import {
   createMilestone,
   deleteMilestone,
   fetchMilestoneIssues,
-  fetchOpenPrsInMilestone,
   fetchPr,
+  fetchPrsAfterTag,
   fetchUnmergedClosedWithMilestone,
   fetchVersionMilestones,
   fetchVersionTags,
@@ -24,8 +24,11 @@ function milestoneForBranch(milestones: VersionMilestone[], ref: string) {
 }
 
 async function addMilestone(milestones: VersionMilestone[], title: string) {
-  if (milestones.some((milestone) => milestone.title === title)) return;
-  milestones.push({title, number: await createMilestone(title), state: 'open', version: parseMilestoneVersion(title)!});
+  const existing = milestones.find((milestone) => milestone.title === title);
+  if (existing) return existing;
+  const milestone = {title, number: await createMilestone(title), state: 'open' as const, version: parseMilestoneVersion(title)!};
+  milestones.push(milestone);
+  return milestone;
 }
 
 async function fetchReleases() {
@@ -48,8 +51,10 @@ async function releaseMilestone(milestones: VersionMilestone[], milestone: Versi
   if (release !== milestone.title && !await updateMilestone(milestone.number, {title: release})) return;
   milestones.splice(milestones.indexOf(milestone), 1);
   await addMilestone(milestones, lineTitle(milestone.version));
+  const unreleased = await fetchPrsAfterTag(`v${release}`, `release/v${releaseVersion(milestone.version)}`);
   let allMoved = true;
-  for (const {number} of await fetchOpenPrsInMilestone(milestone.number)) { // serial, concurrent writes hit secondary rate limits
+  for (const {number, state, pull_request} of await fetchMilestoneIssues(milestone.number)) { // serial, concurrent writes hit secondary rate limits
+    if (!pull_request || (state === 'closed' && !unreleased.has(number))) continue;
     const target = milestoneForBranch(milestones, (await fetchPr(number)).base.ref);
     if (target && !await setMilestone(number, target.number)) allMoved = false;
   }
@@ -70,7 +75,7 @@ async function convertToLine(milestones: VersionMilestone[], milestone: VersionM
   }
   milestones.splice(milestones.indexOf(milestone), 1);
   let allMoved = true;
-  for (const {number} of await fetchMilestoneIssues(milestone.number, 'all')) {
+  for (const {number} of await fetchMilestoneIssues(milestone.number)) {
     if (!await setMilestone(number, line.number)) allMoved = false;
   }
   if (allMoved && await deleteMilestone(milestone.number)) {
@@ -111,7 +116,11 @@ export async function assignMilestone(pr: {number: number; base: {ref: string}})
     console.error('Milestone rollover failed:', error);
     milestones = await fetchVersionMilestones();
   }
-  const milestone = milestoneForBranch(milestones, pr.base.ref);
+  let milestone = milestoneForBranch(milestones, pr.base.ref);
+  if (!milestone) {
+    const line = /^release\/v(.+)$/.exec(pr.base.ref)?.[1];
+    if (line && parseMilestoneVersion(`${line}.x`)) milestone = await addMilestone(milestones, `${line}.x`);
+  }
   if (!milestone) {
     console.info(`No milestone matches ${pr.base.ref} for PR #${pr.number}`);
     return;

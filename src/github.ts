@@ -4,7 +4,7 @@ import type {GiteaVersion} from './giteaVersion.ts';
 import {backportPrExistsCache} from './state.ts';
 import type {Branch, Issue, PullRequest, User} from './types.ts';
 import {TARGET_REPO} from './config.ts';
-import {compareVersions, parseVersion, releaseVersion, type Version} from './version.ts';
+import {compareVersions, parseMilestoneVersion, releaseVersion, type Version} from './version.ts';
 
 const GITHUB_API = 'https://api.github.com';
 const HEADERS = {
@@ -174,9 +174,11 @@ export const fetchOpenIssuesWithLabel = async (label: string) =>
 export const fetchOpenPrsWithLabel = async (label: string) =>
   (await fetchIssuesByLabel('open', label)).filter((item) => item.pull_request);
 
+export const fetchMilestoneIssues = (milestone: number, state: 'open' | 'all') =>
+  fetchList<ListIssue>(`/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&milestone=${milestone}`);
+
 export const fetchOpenPrsInMilestone = async (milestone: number) =>
-  (await fetchList<ListIssue>(`/repos/${TARGET_REPO}/issues?per_page=100&state=open&milestone=${milestone}`))
-    .filter((item) => item.pull_request);
+  (await fetchMilestoneIssues(milestone, 'open')).filter((item) => item.pull_request);
 
 // returns a list of PRs pending merge (have the label reviewed/wait-merge)
 export const fetchPendingMerge = async () =>
@@ -247,7 +249,8 @@ async function repoPathExists(path: string, label: string) {
 
 export const branchExists = (branch: string) => repoPathExists(`branches/${branch}`, `GitHub branch ${branch}`);
 
-export const tagExists = (tag: string) => repoPathExists(`git/ref/tags/${tag}`, `GitHub tag ${tag}`);
+export const fetchVersionTags = async () =>
+  (await fetchList<{ref: string}>(`/repos/${TARGET_REPO}/git/matching-refs/tags/v`)).map(({ref}) => ref.slice('refs/tags/v'.length));
 
 export function deleteBranch(repo: string, branch: string) {
   return mutate(`${GITHUB_API}/repos/${repo}/git/refs/heads/${branch}`, `GitHub delete branch ${branch} of ${repo}`, {
@@ -325,13 +328,13 @@ export async function backportPrExists(pr: {number: number}, giteaMajorMinorVers
   return false;
 }
 
-type Milestone = {title: string; number: number};
+type Milestone = {title: string; number: number; state: 'open' | 'closed'};
 export type VersionMilestone = Milestone & {version: Version};
 
-export async function fetchVersionMilestones(): Promise<VersionMilestone[]> {
-  const milestones = await fetchList<Milestone>(`/repos/${TARGET_REPO}/milestones?per_page=100`);
+export async function fetchVersionMilestones(state: 'open' | 'all' = 'open'): Promise<VersionMilestone[]> {
+  const milestones = await fetchList<Milestone>(`/repos/${TARGET_REPO}/milestones?per_page=100&state=${state}`);
   return milestones.flatMap((milestone) => {
-    const version = parseVersion(milestone.title);
+    const version = parseMilestoneVersion(milestone.title);
     return version ? {...milestone, version} : [];
   });
 }
@@ -355,18 +358,25 @@ export async function createMilestone(title: string) {
     method: 'POST',
     body: JSON.stringify({title}),
   });
-  if (!response.ok) { // a concurrent run may have created it
-    const existing = (await fetchVersionMilestones()).find((milestone) => milestone.title === title);
+  if (!response.ok) { // a concurrent run may have created it, or someone closed it
+    const existing = (await fetchVersionMilestones('all')).find((milestone) => milestone.title === title);
+    if (existing?.state === 'closed') await updateMilestone(existing.number, {state: 'open'});
     if (existing) return existing.number;
   }
   const json: Milestone = await parseJSON(response, label);
   return json.number;
 }
 
-export function closeMilestone(milestone: number) {
-  return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/milestones/${milestone}`, `GitHub close milestone ${milestone}`, {
+export function updateMilestone(milestone: number, changes: {title?: string; state?: 'open' | 'closed'}) {
+  return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/milestones/${milestone}`, `GitHub update milestone ${milestone}`, {
     method: 'PATCH',
-    body: JSON.stringify({state: 'closed'}),
+    body: JSON.stringify(changes),
+  });
+}
+
+export function deleteMilestone(milestone: number) {
+  return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/milestones/${milestone}`, `GitHub delete milestone ${milestone}`, {
+    method: 'DELETE',
   });
 }
 

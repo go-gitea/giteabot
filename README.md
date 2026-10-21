@@ -49,11 +49,16 @@ merge). The script makes sure that unmerged closed pull requests are not
 included in any milestone.
 
 Once a release branch is cut (e.g. `release/v29`), the script creates the next
-major version's milestone (`30.0.0`) for `main`. Once a milestone's version is
-tagged (e.g. `v29.0.0`), the script closes the milestone, creates the next minor
-version's milestone (`29.1.0`) and moves its open pull requests by target
-branch: those targeting `main` to the highest milestone, those targeting a
-release branch to the earliest milestone of its version.
+major version's milestone (`30.0.0`) for `main`. After a line's first release,
+its next release collects in a line milestone (`29.x`, or `1.27.x` for 1.x), as
+patch or minor is only decided when tagging. Once a milestone's version is
+tagged (e.g. `v29.0.0`), or a line's new tag (e.g. `v29.0.1`) has no milestone
+yet, the script renames the milestone to the tag, closes it, creates a fresh
+line milestone and moves its open pull requests by target branch: those
+targeting `main` to the highest milestone, those targeting a release branch to
+the earliest milestone of its version. Milestones of predicted versions (e.g.
+`29.1.0`) on a released line are renamed to, or merged into, its line
+milestone.
 
 ### LGTM
 

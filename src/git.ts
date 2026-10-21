@@ -18,7 +18,8 @@ async function git(args: string[]) {
 
 export async function initializeGitRepo(user: string, email: string | null) {
   repoDir = await mkdtemp(join(tmpdir(), 'giteabot-'));
-  await git(['clone', `https://${process.env.INPUT_GITHUB_TOKEN}@github.com/${process.env.INPUT_GITEA_FORK}.git`, '.']);
+  // a token in the URL breaks pushes with newer curl, see https://github.com/curl/curl/issues/23446
+  await git(['clone', '-c', 'credential.helper=!f() { echo username=x-access-token; echo password=$INPUT_GITHUB_TOKEN; }; f', `https://github.com/${process.env.INPUT_GITEA_FORK}.git`, '.']);
   await git(['remote', 'add', 'upstream', TARGET_REPO_GIT]);
 
   // set the user name and email

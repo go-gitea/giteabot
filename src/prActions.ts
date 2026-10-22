@@ -1,8 +1,8 @@
-import {addComment, needsUpdate, readText, removeLabel, updatePr} from './github.ts';
+import {addComment, fetchPr, needsUpdate, readText, removeLabel, updatePr} from './github.ts';
 
-export async function executePrAction(label: string, pr: {number: number; user: {login: string}}) {
+export async function executePrAction(label: string, pr: {number: number}) {
   if (label === 'giteabot/update-branch') {
-    const err = await updateBranch(pr);
+    const err = await updateBranch(pr.number);
     if (err) {
       await addComment(
         pr.number,
@@ -14,9 +14,10 @@ export async function executePrAction(label: string, pr: {number: number; user: 
   }
 }
 
-export async function updateBranch(pr: {number: number; user: {login: string}}): Promise<Error | undefined> {
-  if (await needsUpdate(pr.number)) {
-    const response = await updatePr(pr.number);
+export async function updateBranch(prNumber: number): Promise<Error | undefined> {
+  const pr = await fetchPr(prNumber);
+  if (await needsUpdate(pr)) {
+    const response = await updatePr(pr);
     if (response.ok) {
       console.info(`Synced PR #${pr.number}`);
       return undefined;

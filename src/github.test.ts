@@ -1,11 +1,11 @@
 import {
   backportPrExists,
-  fetchBranch,
   fetchCandidates,
   fetchPr,
   fetchPrFileNames,
   getPrReviewers,
   hasCommentsSince,
+  needsUpdate,
 } from './github.ts';
 
 test('fetchCandidates() retries GitHub search failures', async () => {
@@ -94,24 +94,13 @@ test('getPrReviewers() lifts the block of a reviewer who re-requested their own 
   expect(fetchMock.mock.calls.filter(([url]) => url.includes('/events'))).toHaveLength(1);
 });
 
-test('fetchBranch("main") returns the appropriate main branch', async () => {
-  const mainBranch = await fetchBranch('main');
-  expect(mainBranch.name).toEqual('main');
-  expect(mainBranch.protected).toEqual(true);
-  expect(mainBranch._links.html).toEqual('https://github.com/go-gitea/gitea/tree/main');
-});
-
-test('fetchBranch() handles full ref name well', async () => {
-  const [mainBranch, releaseV119Branch] = await Promise.all([
-    fetchBranch('refs/heads/main'),
-    fetchBranch('refs/heads/release/v1.19'),
-  ]);
-  expect(mainBranch.name).toEqual('main');
-  expect(mainBranch.protected).toEqual(true);
-  expect(mainBranch._links.html).toEqual('https://github.com/go-gitea/gitea/tree/main');
-  expect(releaseV119Branch.name).toEqual('release/v1.19');
-  expect(releaseV119Branch.protected).toEqual(true);
-  expect(releaseV119Branch._links.html).toEqual('https://github.com/go-gitea/gitea/tree/release/v1.19');
+test('needsUpdate() compares the head against the base branch regardless of maintainer_can_modify', async () => {
+  let behindBy = 1;
+  vi.stubGlobal('fetch', (url: string) => Promise.resolve(Response.json(url.includes('/compare/release/v28...abc') ? {behind_by: behindBy} : {})));
+  const pr = {state: 'open', maintainer_can_modify: false, base: {ref: 'release/v28'}, head: {sha: 'abc'}};
+  expect(await needsUpdate(pr)).toBe(true);
+  behindBy = 0;
+  expect(await needsUpdate(pr)).toBe(false);
 });
 
 test('fetchPrFileNames() returns the appropriate files', async () => {

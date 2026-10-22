@@ -2,7 +2,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {getPrBranchName} from './git.ts';
 import type {GiteaVersion} from './giteaVersion.ts';
 import {backportPrExistsCache} from './state.ts';
-import type {Branch, Issue, PullRequest, User} from './types.ts';
+import type {Issue, PullRequest, User} from './types.ts';
 import {TARGET_REPO} from './config.ts';
 import {compareVersions, parseMilestoneVersion, releaseVersion, type Version} from './version.ts';
 
@@ -224,27 +224,26 @@ export async function fetchPrFileNames(prNumber: number) {
 
 // update a given PR with the latest upstream changes by merging HEAD from
 // the base branch into the pull request branch
-export async function updatePr(prNumber: number) {
-  const pr = await fetchPr(prNumber);
+export function updatePr(pr: {number: number; head: {sha: string}}) {
   return fetchWithRetry(
-    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}/update-branch`,
-    `GitHub update branch of PR #${prNumber}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${pr.number}/update-branch`,
+    `GitHub update branch of PR #${pr.number}`,
     {method: 'PUT', body: JSON.stringify({expected_head_sha: pr.head.sha})},
   );
 }
 
-// sets a commit status
-export function setCommitStatus(sha: string, state: 'error' | 'failure' | 'pending' | 'success', description: string) {
+// skips unchanged statuses, GitHub rejects more than 1000 per sha and context
+export async function setCommitStatus(sha: string, state: 'error' | 'failure' | 'pending' | 'success', description: string) {
+  if ((await fetchJSON<{statuses: {context: string; state: string; description: string | null}[]}>(
+    `${GITHUB_API}/repos/${TARGET_REPO}/commits/${sha}/status?per_page=100`,
+    `GitHub combined status of ${sha}`,
+  )).json.statuses.some((status) => status.context === 'giteabot/lgtm' && status.state === state && status.description === description)) {
+    return false;
+  }
   return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`, `GitHub commit status of ${sha}`, {
     method: 'POST',
     body: JSON.stringify({state, context: 'giteabot/lgtm', description}),
   });
-}
-
-// get a target repo branch
-export async function fetchBranch(branch: string) {
-  const {json} = await fetchJSON<Branch>(`${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`, `GitHub branch ${branch}`);
-  return json;
 }
 
 // throws on non-404 (auth/rate-limit/5xx) — only 404 means "doesn't exist"
@@ -269,18 +268,14 @@ export function deleteBranch(repo: string, branch: string) {
 }
 
 // checks if the given PR needs to be updated
-export async function needsUpdate(prNumber: number) {
-  // get the PR and check if its base sha is the same as its base branch
-  const pr = await fetchPr(prNumber);
-
-  // if maintainers can't modify the PR, it doesn't need to be updated
-  if (!pr.maintainer_can_modify) return false;
-
+export async function needsUpdate(pr: {state: string; base: {ref: string}; head: {sha: string}}) {
   // if the PR is not open, it doesn't need to be updated
   if (pr.state !== 'open') return false;
 
-  const base = await fetchBranch(pr.base.ref);
-  return pr.base.sha !== base.commit.sha;
+  return (await fetchJSON<{behind_by: number}>(
+    `${GITHUB_API}/repos/${TARGET_REPO}/compare/${pr.base.ref}...${pr.head.sha}?per_page=1&page=2`, // page 2 omits the file list and patches
+    `GitHub compare ${pr.base.ref}...${pr.head.sha}`,
+  )).json.behind_by > 0;
 }
 
 // given a PR number that has the given label, remove the label

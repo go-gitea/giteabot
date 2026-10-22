@@ -390,7 +390,12 @@ type Review = {
   user: {login: string};
 };
 
-export async function getPrReviewers(pr: {number: number; requested_reviewers?: {login: string}[] | null}) {
+async function hasWriteAccess(login: string) {
+  const response = await fetchWithRetry(`${GITHUB_API}/repos/${TARGET_REPO}/collaborators/${login}/permission`, `GitHub permission of ${login}`);
+  return response.ok && ['admin', 'write'].includes((await parseJSON(response, `GitHub permission of ${login}`)).permission);
+}
+
+export async function getPrReviewers(pr: {number: number; user: {login: string}; requested_reviewers?: {login: string}[] | null}) {
   // load all reviews
   const reviews = await fetchList<Review>(`/repos/${TARGET_REPO}/pulls/${pr.number}/reviews?per_page=100`);
 
@@ -422,7 +427,7 @@ export async function getPrReviewers(pr: {number: number; requested_reviewers?: 
     approvers.delete(requestedReviewer.login);
   }
 
-  // a blocker who re-requested their own review has lifted their block
+  // a re-request lifts a block when it comes from the blocker or another maintainer, never the author
   const requestedBlockers = pr.requested_reviewers!.map((reviewer) => reviewer.login).filter((login) => blockers.has(login));
   if (requestedBlockers.length > 0) {
     const events = await fetchList<{event: string; requested_reviewer?: {login: string}; review_requester?: {login: string}}>(
@@ -436,7 +441,8 @@ export async function getPrReviewers(pr: {number: number; requested_reviewers?: 
       }
     }
     for (const login of requestedBlockers) {
-      if (lastRequester.get(login) === login) blockers.delete(login);
+      const requester = lastRequester.get(login);
+      if (requester === login || (requester && requester !== pr.user.login && await hasWriteAccess(requester))) blockers.delete(login);
     }
   }
 

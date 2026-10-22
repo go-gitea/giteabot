@@ -59,7 +59,9 @@ appropriate label (one of `lgtm/need 2`, `lgtm/need 1`, `lgtm/done`, or
 `lgtm/blocked`) based on the number of approvals (or change requests) the pull
 request has. It will also set the commit status to `success` if the pull request
 has 2 or more approvals without changes requested (`pending` if not or `failure`
-if changes are requested).
+if changes are requested). A change request stops blocking once its reviewer
+approves, it is dismissed, or the reviewer or another maintainer re-requests the
+review.
 
 ### Comments
 

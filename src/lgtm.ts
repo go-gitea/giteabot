@@ -21,6 +21,7 @@ export async function setPrStatusAndLabel(pr: {
   head: {sha: string};
   title: string;
   number: number;
+  user: {login: string};
   requested_reviewers?: {login: string}[] | null;
 }) {
   let reviewers;

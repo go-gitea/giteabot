@@ -69,6 +69,8 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
       await runCheck('labels', maintainLabels);
       await runCheck('merge_queue', updateMergeQueue);
       await runCheck('pr_actions', () => executePrAction(labelName, pr));
+    } else if (pr.labels.some((label: {name: string}) => label.name === 'reviewed/wait-merge')) {
+      await runCheck('merge_queue', updateMergeQueue); // this run may have replaced the pending run of the wait-merge label event
     }
     return;
   }
@@ -91,6 +93,9 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
   ) {
     await runCheck('lgtm', () => setPrStatusAndLabel(pr));
   } else if (action === 'closed') {
+    if (pr.merged && pr.base.ref !== 'main') {
+      await runCheck('merge_queue', updateMergeQueue); // main advances already trigger the push maintenance run
+    }
     if (pr.merged && !pr.milestone) {
       await runCheck('milestones', () => assignMilestone(pr));
     }

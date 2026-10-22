@@ -2,7 +2,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {getPrBranchName} from './git.ts';
 import type {GiteaVersion} from './giteaVersion.ts';
 import {backportPrExistsCache} from './state.ts';
-import type {Branch, Issue, PullRequest, User} from './types.ts';
+import type {Issue, PullRequest, User} from './types.ts';
 import {TARGET_REPO} from './config.ts';
 import {compareVersions, parseMilestoneVersion, releaseVersion, type Version} from './version.ts';
 
@@ -233,18 +233,19 @@ export async function updatePr(prNumber: number) {
   );
 }
 
-// sets a commit status
-export function setCommitStatus(sha: string, state: 'error' | 'failure' | 'pending' | 'success', description: string) {
+// sets the lgtm commit status unless already current, GitHub rejects more than 1000 statuses per sha and context
+export async function setCommitStatus(sha: string, state: 'error' | 'failure' | 'pending' | 'success', description: string) {
+  const {json} = await fetchJSON<{statuses: {context: string; state: string; description: string | null}[]}>(
+    `${GITHUB_API}/repos/${TARGET_REPO}/commits/${sha}/status?per_page=100`,
+    `GitHub combined status of ${sha}`,
+  );
+  if (json.statuses.some((status) => status.context === 'giteabot/lgtm' && status.state === state && status.description === description)) {
+    return false;
+  }
   return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`, `GitHub commit status of ${sha}`, {
     method: 'POST',
     body: JSON.stringify({state, context: 'giteabot/lgtm', description}),
   });
-}
-
-// get a target repo branch
-export async function fetchBranch(branch: string) {
-  const {json} = await fetchJSON<Branch>(`${GITHUB_API}/repos/${TARGET_REPO}/branches/${branch}`, `GitHub branch ${branch}`);
-  return json;
 }
 
 // throws on non-404 (auth/rate-limit/5xx) — only 404 means "doesn't exist"
@@ -270,14 +271,17 @@ export function deleteBranch(repo: string, branch: string) {
 
 // checks if the given PR needs to be updated
 export async function needsUpdate(prNumber: number) {
-  // get the PR and check if its base sha is the same as its base branch
   const pr = await fetchPr(prNumber);
 
   // if the PR is not open, it doesn't need to be updated
   if (pr.state !== 'open') return false;
 
-  const base = await fetchBranch(pr.base.ref);
-  return pr.base.sha !== base.commit.sha;
+  // pr.base.sha is the base tip at the last sync, not the merge base, so it can't tell if the head is behind
+  const {json} = await fetchJSON<{behind_by: number}>(
+    `${GITHUB_API}/repos/${TARGET_REPO}/compare/${pr.base.ref}...${pr.head.sha}?per_page=1`,
+    `GitHub compare ${pr.base.ref}...${pr.head.sha}`,
+  );
+  return json.behind_by > 0;
 }
 
 // given a PR number that has the given label, remove the label

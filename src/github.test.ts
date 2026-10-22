@@ -96,12 +96,11 @@ test('getPrReviewers() lifts the block of a reviewer who re-requested their own 
 
 test('needsUpdate() compares the head against the base branch regardless of maintainer_can_modify', async () => {
   let behindBy = 1;
-  vi.stubGlobal('fetch', (url: string) => Promise.resolve(Response.json(url.includes('/compare/release/v28...abc') ?
-    {behind_by: behindBy} :
-    {state: 'open', maintainer_can_modify: false, base: {ref: 'release/v28'}, head: {sha: 'abc'}})));
-  expect(await needsUpdate(1)).toBe(true);
+  vi.stubGlobal('fetch', (url: string) => Promise.resolve(Response.json(url.includes('/compare/release/v28...abc') ? {behind_by: behindBy} : {})));
+  const pr = {state: 'open', maintainer_can_modify: false, base: {ref: 'release/v28'}, head: {sha: 'abc'}};
+  expect(await needsUpdate(pr)).toBe(true);
   behindBy = 0;
-  expect(await needsUpdate(1)).toBe(false);
+  expect(await needsUpdate(pr)).toBe(false);
 });
 
 test('fetchPrFileNames() returns the appropriate files', async () => {

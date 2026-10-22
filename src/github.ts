@@ -224,22 +224,20 @@ export async function fetchPrFileNames(prNumber: number) {
 
 // update a given PR with the latest upstream changes by merging HEAD from
 // the base branch into the pull request branch
-export async function updatePr(prNumber: number) {
-  const pr = await fetchPr(prNumber);
+export function updatePr(pr: {number: number; head: {sha: string}}) {
   return fetchWithRetry(
-    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${prNumber}/update-branch`,
-    `GitHub update branch of PR #${prNumber}`,
+    `${GITHUB_API}/repos/${TARGET_REPO}/pulls/${pr.number}/update-branch`,
+    `GitHub update branch of PR #${pr.number}`,
     {method: 'PUT', body: JSON.stringify({expected_head_sha: pr.head.sha})},
   );
 }
 
-// sets the lgtm commit status unless already current, GitHub rejects more than 1000 statuses per sha and context
+// skips unchanged statuses, GitHub rejects more than 1000 per sha and context
 export async function setCommitStatus(sha: string, state: 'error' | 'failure' | 'pending' | 'success', description: string) {
-  const {json} = await fetchJSON<{statuses: {context: string; state: string; description: string | null}[]}>(
+  if ((await fetchJSON<{statuses: {context: string; state: string; description: string | null}[]}>(
     `${GITHUB_API}/repos/${TARGET_REPO}/commits/${sha}/status?per_page=100`,
     `GitHub combined status of ${sha}`,
-  );
-  if (json.statuses.some((status) => status.context === 'giteabot/lgtm' && status.state === state && status.description === description)) {
+  )).json.statuses.some((status) => status.context === 'giteabot/lgtm' && status.state === state && status.description === description)) {
     return false;
   }
   return mutate(`${GITHUB_API}/repos/${TARGET_REPO}/statuses/${sha}`, `GitHub commit status of ${sha}`, {
@@ -270,18 +268,14 @@ export function deleteBranch(repo: string, branch: string) {
 }
 
 // checks if the given PR needs to be updated
-export async function needsUpdate(prNumber: number) {
-  const pr = await fetchPr(prNumber);
-
+export async function needsUpdate(pr: {state: string; base: {ref: string}; head: {sha: string}}) {
   // if the PR is not open, it doesn't need to be updated
   if (pr.state !== 'open') return false;
 
-  // pr.base.sha is the base tip at the last sync, not the merge base, so it can't tell if the head is behind
-  const {json} = await fetchJSON<{behind_by: number}>(
-    `${GITHUB_API}/repos/${TARGET_REPO}/compare/${pr.base.ref}...${pr.head.sha}?per_page=1`,
+  return (await fetchJSON<{behind_by: number}>(
+    `${GITHUB_API}/repos/${TARGET_REPO}/compare/${pr.base.ref}...${pr.head.sha}?per_page=1&page=2`, // page 2 omits the file list and patches
     `GitHub compare ${pr.base.ref}...${pr.head.sha}`,
-  );
-  return json.behind_by > 0;
+  )).json.behind_by > 0;
 }
 
 // given a PR number that has the given label, remove the label

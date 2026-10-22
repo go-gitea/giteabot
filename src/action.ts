@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {createBackports, deleteBackportBranch} from './backport.ts';
 import {isRelevantLabel, maintainLabels} from './labels.ts';
-import {updateMergeQueue} from './mergeQueue.ts';
+import {updateMergeQueue, updateQueuedPr} from './mergeQueue.ts';
 import {assignMilestone, removeMilestonesFromUnmergedClosedPrs, rolloverReleasedMilestones} from './milestones.ts';
 import {setPrStatusAndLabel, setPrStatusAndLabelBySha, sweepLgtmPrs} from './lgtm.ts';
 import {commentIfTranslationsChanged} from './comments.ts';
@@ -70,7 +70,7 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
       await runCheck('merge_queue', updateMergeQueue);
       await runCheck('pr_actions', () => executePrAction(labelName, pr));
     } else if (pr.labels.some((label: {name: string}) => label.name === 'reviewed/wait-merge')) {
-      await runCheck('merge_queue', updateMergeQueue); // this run may have replaced the pending run of the wait-merge label event
+      await runCheck('merge_queue', () => updateQueuedPr(pr.number)); // this run may have replaced the pending run of the wait-merge label event
     }
     return;
   }
@@ -94,7 +94,7 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
     await runCheck('lgtm', () => setPrStatusAndLabel(pr));
   } else if (action === 'closed') {
     if (pr.merged && pr.base.ref !== 'main') {
-      await runCheck('merge_queue', updateMergeQueue); // main advances already trigger the push maintenance run
+      await runCheck('merge_queue', updateMergeQueue);
     }
     if (pr.merged && !pr.milestone) {
       await runCheck('milestones', () => assignMilestone(pr));

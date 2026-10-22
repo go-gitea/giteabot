@@ -6,6 +6,7 @@ import {
   fetchPrFileNames,
   getPrReviewers,
   hasCommentsSince,
+  needsUpdate,
 } from './github.ts';
 
 test('fetchCandidates() retries GitHub search failures', async () => {
@@ -92,6 +93,13 @@ test('getPrReviewers() lifts the block of a reviewer who re-requested their own 
 
   await getPrReviewers({number: 1, requested_reviewers: []});
   expect(fetchMock.mock.calls.filter(([url]) => url.includes('/events'))).toHaveLength(1);
+});
+
+test('needsUpdate() updates behind PRs regardless of maintainer_can_modify', async () => {
+  vi.stubGlobal('fetch', (url: string) => Promise.resolve(Response.json(url.includes('/branches/') ?
+    {commit: {sha: 'new'}} :
+    {state: 'open', maintainer_can_modify: false, base: {ref: 'main', sha: 'old'}})));
+  expect(await needsUpdate(1)).toBe(true);
 });
 
 test('fetchBranch("main") returns the appropriate main branch', async () => {

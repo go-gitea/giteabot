@@ -30,18 +30,29 @@ test('sweepLgtmPrs() recomputes a PR once when it surfaces under two label queri
   expect(calls).toEqual({prFetches: 2, statusWrites: 1});
 });
 
-test('setPrStatusAndLabel() takes a PR that lost its approval out of the merge queue', async () => {
+test('setPrStatusAndLabel() counts only maintainer reviews and takes a PR that lost its approval out of the merge queue', async () => {
+  const roles: Record<string, string> = {maintainer: 'triage', outsider: 'read', blocker: 'read'};
+  const reviews = [
+    {state: 'APPROVED', user: {login: 'maintainer'}},
+    {state: 'APPROVED', user: {login: 'outsider'}},
+    {state: 'CHANGES_REQUESTED', user: {login: 'blocker'}},
+  ];
   const graphqlCalls: string[] = [];
+  const statuses: {description: string}[] = [];
   vi.stubGlobal('fetch', (url: string, options?: {body?: string}) => {
     if (url.endsWith('/graphql')) {
       graphqlCalls.push(JSON.parse(options!.body!).query.split('(')[0]);
       return json({data: {repository: {pullRequest: {id: 'PR_1', isMergeQueueEnabled: true, isInMergeQueue: false, autoMergeRequest: {enabledAt: 'x'}}}}});
     }
-    if (url.includes('/pulls/1/reviews')) return json([]);
+    const login = /\/collaborators\/([^/]+)\/permission/.exec(url)?.[1];
+    if (login) return json({role_name: roles[login]});
+    if (url.includes('/pulls/1/reviews')) return json(reviews);
     if (url.includes('/commits/abc/status?')) return json({statuses: []});
+    if (url.includes('/statuses/')) statuses.push(JSON.parse(options!.body!));
     return json({});
   });
-  await setPrStatusAndLabel({number: 1, title: 't', head: {sha: 'abc'}, labels: [{name: 'lgtm/done'}, {name: 'reviewed/wait-merge'}], requested_reviewers: []});
+  await setPrStatusAndLabel({number: 1, title: 't', head: {sha: 'abc'}, labels: [{name: 'lgtm/done'}], requested_reviewers: []});
+  expect(statuses.map((status) => status.description)).toEqual(['Needs one more approval']);
   expect(graphqlCalls).toEqual(['query', 'mutation']);
 });
 

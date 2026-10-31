@@ -4,6 +4,7 @@ import {
   fetchOpenPrsWithLabel,
   fetchPr,
   getPrReviewers,
+  isMaintainer,
   removeLabel,
   setCommitStatus,
 } from './github.ts';
@@ -27,6 +28,12 @@ export async function setPrStatusAndLabel(pr: {
   let reviewers;
   try {
     reviewers = await getPrReviewers(pr);
+    for (const login of [...reviewers.approvers, ...reviewers.blockers]) {
+      if (!await isMaintainer(login)) {
+        reviewers.approvers.delete(login);
+        reviewers.blockers.delete(login);
+      }
+    }
   } catch (error) {
     console.error(error);
     return;
@@ -49,9 +56,8 @@ export async function setPrStatusAndLabel(pr: {
   }
 
   // the queue only checks giteabot/lgtm before a PR enters it
-  const lostApproval = desiredLabel !== lgtmLabels.done && currentLgtmLabels.some((label) => label.name === lgtmLabels.done);
-  if (lostApproval && pr.labels.some((label) => label.name === 'reviewed/wait-merge')) {
-    await leaveMergeQueue(pr.number, true);
+  if (desiredLabel !== lgtmLabels.done && currentLgtmLabels.some((label) => label.name === lgtmLabels.done)) {
+    await leaveMergeQueue(pr.number);
   }
 }
 

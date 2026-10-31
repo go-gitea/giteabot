@@ -1,7 +1,6 @@
 import {readFile} from 'node:fs/promises';
 import {createBackports, deleteBackportBranch} from './backport.ts';
 import {isRelevantLabel, maintainLabels} from './labels.ts';
-import {leaveMergeQueue, updateMergeQueue, updateQueuedPr} from './mergeQueue.ts';
 import {assignMilestone, removeMilestonesFromUnmergedClosedPrs, rolloverReleasedMilestones} from './milestones.ts';
 import {setPrStatusAndLabel, setPrStatusAndLabelBySha, sweepLgtmPrs} from './lgtm.ts';
 import {commentIfTranslationsChanged} from './comments.ts';
@@ -53,7 +52,6 @@ const payload = JSON.parse(payloadText);
 
 async function runMaintenance() {
   await runCheck('labels', maintainLabels);
-  await runCheck('merge_queue', updateMergeQueue);
   await runCheck('lock', lockOldIssues);
   await runCheck('feedback', closeStaleFeedbackIssues);
   await runCheck('last_call', handleLastCallPrs);
@@ -67,13 +65,7 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
     const labelName = payload.label?.name;
     if (labelName && isRelevantLabel(labelName)) {
       await runCheck('labels', maintainLabels);
-      if (action === 'unlabeled' && labelName === 'reviewed/wait-merge') {
-        await runCheck('merge_queue', () => leaveMergeQueue(pr.number, false));
-      }
-      await runCheck('merge_queue', updateMergeQueue);
       await runCheck('pr_actions', () => executePrAction(labelName, pr));
-    } else if (pr.labels.some((label: {name: string}) => label.name === 'reviewed/wait-merge')) {
-      await runCheck('merge_queue', () => updateQueuedPr(pr.number)); // this run may have replaced the pending run of the wait-merge label event
     }
     return;
   }
@@ -96,9 +88,6 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
   ) {
     await runCheck('lgtm', () => setPrStatusAndLabel(pr));
   } else if (action === 'closed') {
-    if (pr.merged && pr.base.ref !== 'main') {
-      await runCheck('merge_queue', updateMergeQueue);
-    }
     if (pr.merged && !pr.milestone) {
       await runCheck('milestones', () => assignMilestone(pr));
     }

@@ -6,7 +6,7 @@ test('parseEnabledChecks() enables all checks by default', () => {
 });
 
 test('parseEnabledChecks() accepts comma and whitespace separated checks', () => {
-  expect(parseEnabledChecks('labels, merge_queue\nlock')).toEqual(new Set(['labels', 'merge_queue', 'lock']));
+  expect(parseEnabledChecks('labels, lgtm\nlock')).toEqual(new Set(['labels', 'lgtm', 'lock']));
 });
 
 test('parseEnabledChecks() accepts none', () => {

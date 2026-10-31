@@ -7,7 +7,6 @@ export const AVAILABLE_CHECKS = [
   'backport',
   'backport_branches',
   'labels',
-  'merge_queue',
   'lock',
   'feedback',
   'last_call',

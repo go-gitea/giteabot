@@ -158,9 +158,9 @@ type ListIssue = {
   pull_request?: {merged_at: string | null};
 };
 
-const fetchIssuesByLabel = (state: 'open' | 'closed', label: string, suffix = '') =>
+const fetchIssuesByLabel = (state: 'open' | 'closed', label: string) =>
   fetchList<ListIssue>(
-    `/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&labels=${encodeURIComponent(label)}${suffix}`,
+    `/repos/${TARGET_REPO}/issues?per_page=100&state=${state}&labels=${encodeURIComponent(label)}`,
   );
 
 // returns a list of PRs that are merged and have the given label
@@ -189,10 +189,6 @@ export async function fetchPrsAfterTag(tag: string, branch: string) {
   }
   return prs;
 }
-
-// returns a list of PRs pending merge (have the label reviewed/wait-merge)
-export const fetchPendingMerge = async () =>
-  (await fetchIssuesByLabel('open', 'reviewed/wait-merge', '&sort=created&direction=asc')).filter((item) => item.pull_request);
 
 // returns a list of all open PRs
 export function fetchOpenPrs() {
@@ -242,27 +238,12 @@ async function graphql<T>(query: string, variables: Record<string, unknown>, lab
   return json.data;
 }
 
-export type MergeQueueState = {
-  id: string;
-  state: 'OPEN' | 'CLOSED' | 'MERGED';
-  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
-  isMergeQueueEnabled: boolean;
-  isInMergeQueue: boolean;
-  autoMergeRequest: {enabledAt: string} | null;
-  timelineItems: {nodes: ({__typename: 'PullRequestCommit' | 'RemovedFromMergeQueueEvent'} | {__typename: 'LabeledEvent'; label: {name: string}})[]};
-};
-
 export async function fetchMergeQueueState(prNumber: number) {
   const [owner, name] = TARGET_REPO.split('/');
-  return (await graphql<{repository: {pullRequest: MergeQueueState}}>(
+  return (await graphql<{repository: {pullRequest: {id: string; isMergeQueueEnabled: boolean; isInMergeQueue: boolean; autoMergeRequest: object | null}}}>(
     `query($owner: String!, $name: String!, $number: Int!) {
       repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {
-          id state mergeable isMergeQueueEnabled isInMergeQueue autoMergeRequest {enabledAt}
-          timelineItems(last: 50, itemTypes: [PULL_REQUEST_COMMIT, REMOVED_FROM_MERGE_QUEUE_EVENT, LABELED_EVENT]) {
-            nodes {__typename ... on LabeledEvent {label {name}}}
-          }
-        }
+        pullRequest(number: $number) {id isMergeQueueEnabled isInMergeQueue autoMergeRequest {enabledAt}}
       }
     }`,
     {owner, name, number: prNumber},
@@ -270,8 +251,7 @@ export async function fetchMergeQueueState(prNumber: number) {
   )).repository.pullRequest;
 }
 
-// with a merge queue, enablePullRequestAutoMerge adds the PR to the queue once its required checks pass
-export async function mutatePr(mutation: 'enablePullRequestAutoMerge' | 'disablePullRequestAutoMerge' | 'dequeuePullRequest', prNumber: number, pullRequestId: string) {
+export async function mutatePr(mutation: 'disablePullRequestAutoMerge' | 'dequeuePullRequest', prNumber: number, pullRequestId: string) {
   await graphql(
     `mutation($id: ID!) {${mutation}(input: {${mutation === 'dequeuePullRequest' ? 'id' : 'pullRequestId'}: $id}) {clientMutationId}}`,
     {id: pullRequestId},
@@ -436,6 +416,23 @@ type Review = {
   state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING';
   user: {login: string};
 };
+
+const maintainerChecks = new Map<string, Promise<boolean>>();
+
+// maintainers have at least triage access, read access means anyone on a public repo
+export function isMaintainer(login: string) {
+  let check = maintainerChecks.get(login);
+  if (!check) {
+    check = (async () => {
+      const response = await fetchWithRetry(`${GITHUB_API}/repos/${TARGET_REPO}/collaborators/${login}/permission`, `GitHub permission of ${login}`);
+      if (!response.ok) return false;
+      const {role_name} = await response.json() as {role_name: string};
+      return ['triage', 'write', 'maintain', 'admin'].includes(role_name);
+    })();
+    maintainerChecks.set(login, check);
+  }
+  return check;
+}
 
 export async function getPrReviewers(pr: {number: number; requested_reviewers?: {login: string}[] | null}) {
   // load all reviews

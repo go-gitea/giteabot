@@ -41,6 +41,10 @@ The script will also look for pull requests that have the label
 into the pull request head branch. If a merge conflict occurs, it will remove
 the pull request from the merge queue.
 
+If the base branch has a GitHub merge queue enabled, the script enables
+auto-merge instead, so GitHub adds the pull request to the queue once its
+required checks pass, and does not update the head branch.
+
 ### Milestone maintenance
 
 When a pull request is created, the script will assign it a milestone based on

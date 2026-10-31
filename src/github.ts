@@ -232,6 +232,47 @@ export function updatePr(pr: {number: number; head: {sha: string}}) {
   );
 }
 
+// GraphQL reports errors with a 200 status, so they need to be checked separately
+async function graphql<T>(query: string, variables: Record<string, unknown>, label: string) {
+  const {json} = await fetchJSON<{data: T; errors?: {message: string}[]}>(`${GITHUB_API}/graphql`, label, {
+    method: 'POST',
+    body: JSON.stringify({query, variables}),
+  });
+  if (json.errors?.length) throw new Error(`${label} failed: ${json.errors.map((error) => error.message).join('; ')}`);
+  return json.data;
+}
+
+export type MergeQueueState = {
+  id: string;
+  state: 'OPEN' | 'CLOSED' | 'MERGED';
+  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+  isMergeQueueEnabled: boolean;
+  isInMergeQueue: boolean;
+  autoMergeRequest: {enabledAt: string} | null;
+};
+
+export async function fetchMergeQueueState(prNumber: number) {
+  const [owner, name] = TARGET_REPO.split('/');
+  return (await graphql<{repository: {pullRequest: MergeQueueState}}>(
+    `query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {id state mergeable isMergeQueueEnabled isInMergeQueue autoMergeRequest {enabledAt}}
+      }
+    }`,
+    {owner, name, number: prNumber},
+    `GitHub merge queue state of PR #${prNumber}`,
+  )).repository.pullRequest;
+}
+
+// with a merge queue, auto-merge adds the PR to the queue once its required checks pass
+export async function enableAutoMerge(prNumber: number, pullRequestId: string) {
+  await graphql(
+    `mutation($id: ID!) {enablePullRequestAutoMerge(input: {pullRequestId: $id}) {clientMutationId}}`,
+    {id: pullRequestId},
+    `GitHub enable auto-merge of PR #${prNumber}`,
+  );
+}
+
 // skips unchanged statuses, GitHub rejects more than 1000 per sha and context
 export async function setCommitStatus(sha: string, state: 'error' | 'failure' | 'pending' | 'success', description: string) {
   if ((await fetchJSON<{statuses: {context: string; state: string; description: string | null}[]}>(

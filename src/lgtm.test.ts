@@ -1,4 +1,4 @@
-import {sweepLgtmPrs} from './lgtm.ts';
+import {setPrStatusAndLabel, sweepLgtmPrs} from './lgtm.ts';
 
 const json = (data: unknown) => Promise.resolve(Response.json(data));
 
@@ -28,6 +28,21 @@ test('sweepLgtmPrs() recomputes a PR once when it surfaces under two label queri
   expect(calls).toEqual({prFetches: 1, statusWrites: 1});
   await sweepLgtmPrs();
   expect(calls).toEqual({prFetches: 2, statusWrites: 1});
+});
+
+test('setPrStatusAndLabel() takes a PR that lost its approval out of the merge queue', async () => {
+  const graphqlCalls: string[] = [];
+  vi.stubGlobal('fetch', (url: string, options?: {body?: string}) => {
+    if (url.endsWith('/graphql')) {
+      graphqlCalls.push(JSON.parse(options!.body!).query.split('(')[0]);
+      return json({data: {repository: {pullRequest: {id: 'PR_1', isMergeQueueEnabled: true, isInMergeQueue: false, autoMergeRequest: {enabledAt: 'x'}}}}});
+    }
+    if (url.includes('/pulls/1/reviews')) return json([]);
+    if (url.includes('/commits/abc/status?')) return json({statuses: []});
+    return json({});
+  });
+  await setPrStatusAndLabel({number: 1, title: 't', head: {sha: 'abc'}, labels: [{name: 'lgtm/done'}, {name: 'reviewed/wait-merge'}], requested_reviewers: []});
+  expect(graphqlCalls).toEqual(['query', 'mutation']);
 });
 
 test('sweepLgtmPrs(since) skips PRs older than the cutoff, processes newer ones', async () => {

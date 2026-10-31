@@ -7,6 +7,7 @@ import {
   removeLabel,
   setCommitStatus,
 } from './github.ts';
+import {leaveMergeQueue} from './mergeQueue.ts';
 
 export const lgtmLabels = {
   need2: 'lgtm/need 2',
@@ -45,6 +46,12 @@ export async function setPrStatusAndLabel(pr: {
   // set commit status
   if (await setCommitStatus(pr.head.sha, state, message)) {
     console.info(`Set commit status in "${pr.title}" (#${pr.number})`);
+  }
+
+  // the queue only checks giteabot/lgtm before a PR enters it
+  const lostApproval = desiredLabel !== lgtmLabels.done && currentLgtmLabels.some((label) => label.name === lgtmLabels.done);
+  if (lostApproval && pr.labels.some((label) => label.name === 'reviewed/wait-merge')) {
+    await leaveMergeQueue(pr.number, true);
   }
 }
 

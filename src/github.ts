@@ -249,6 +249,7 @@ export type MergeQueueState = {
   isMergeQueueEnabled: boolean;
   isInMergeQueue: boolean;
   autoMergeRequest: {enabledAt: string} | null;
+  timelineItems: {nodes: ({__typename: 'PullRequestCommit' | 'RemovedFromMergeQueueEvent'} | {__typename: 'LabeledEvent'; label: {name: string}})[]};
 };
 
 export async function fetchMergeQueueState(prNumber: number) {
@@ -256,7 +257,12 @@ export async function fetchMergeQueueState(prNumber: number) {
   return (await graphql<{repository: {pullRequest: MergeQueueState}}>(
     `query($owner: String!, $name: String!, $number: Int!) {
       repository(owner: $owner, name: $name) {
-        pullRequest(number: $number) {id state mergeable isMergeQueueEnabled isInMergeQueue autoMergeRequest {enabledAt}}
+        pullRequest(number: $number) {
+          id state mergeable isMergeQueueEnabled isInMergeQueue autoMergeRequest {enabledAt}
+          timelineItems(last: 50, itemTypes: [PULL_REQUEST_COMMIT, REMOVED_FROM_MERGE_QUEUE_EVENT, LABELED_EVENT]) {
+            nodes {__typename ... on LabeledEvent {label {name}}}
+          }
+        }
       }
     }`,
     {owner, name, number: prNumber},
@@ -264,12 +270,12 @@ export async function fetchMergeQueueState(prNumber: number) {
   )).repository.pullRequest;
 }
 
-// with a merge queue, auto-merge adds the PR to the queue once its required checks pass
-export async function enableAutoMerge(prNumber: number, pullRequestId: string) {
+// with a merge queue, enablePullRequestAutoMerge adds the PR to the queue once its required checks pass
+export async function mutatePr(mutation: 'enablePullRequestAutoMerge' | 'disablePullRequestAutoMerge' | 'dequeuePullRequest', prNumber: number, pullRequestId: string) {
   await graphql(
-    `mutation($id: ID!) {enablePullRequestAutoMerge(input: {pullRequestId: $id}) {clientMutationId}}`,
+    `mutation($id: ID!) {${mutation}(input: {${mutation === 'dequeuePullRequest' ? 'id' : 'pullRequestId'}: $id}) {clientMutationId}}`,
     {id: pullRequestId},
-    `GitHub enable auto-merge of PR #${prNumber}`,
+    `GitHub ${mutation} of PR #${prNumber}`,
   );
 }
 

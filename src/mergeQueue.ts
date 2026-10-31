@@ -1,4 +1,4 @@
-import {addComment, enableAutoMerge, fetchMergeQueueState, fetchPendingMerge, fetchPr, removeLabel, type MergeQueueState} from './github.ts';
+import {addComment, fetchMergeQueueState, fetchPendingMerge, fetchPr, mutatePr, removeLabel, type MergeQueueState} from './github.ts';
 import {updateBranch} from './prActions.ts';
 
 export async function updateMergeQueue() {
@@ -28,6 +28,10 @@ export async function updateQueuedPr(prNumber: number) {
 async function enqueuePr(prNumber: number, queue: MergeQueueState) {
   if (queue.state !== 'OPEN' || queue.isInMergeQueue || queue.autoMergeRequest) return;
 
+  // a PR the queue removed waits for a new commit or a re-added label instead of failing the queue again
+  const lastEvent = queue.timelineItems.nodes.findLast((item) => item.__typename !== 'LabeledEvent' || item.label.name === 'reviewed/wait-merge');
+  if (lastEvent?.__typename === 'RemovedFromMergeQueueEvent') return;
+
   if (queue.mergeable === 'CONFLICTING') {
     const pr = await fetchPr(prNumber);
     await addComment(prNumber, `@${pr.user.login} please fix the merge conflicts. :tea:`);
@@ -35,6 +39,19 @@ async function enqueuePr(prNumber: number, queue: MergeQueueState) {
     return;
   }
 
-  await enableAutoMerge(prNumber, queue.id);
+  await mutatePr('enablePullRequestAutoMerge', prNumber, queue.id);
   console.info(`Queued PR #${prNumber} for merge`);
+}
+
+// keeps a PR that lost its approval or its reviewed/wait-merge label from merging through the queue
+export async function leaveMergeQueue(prNumber: number, removeWaitMergeLabel: boolean) {
+  let queue = await fetchMergeQueueState(prNumber);
+  if (!queue.isMergeQueueEnabled) return;
+
+  if (removeWaitMergeLabel) await removeLabel(prNumber, 'reviewed/wait-merge');
+  if (queue.isInMergeQueue) {
+    await mutatePr('dequeuePullRequest', prNumber, queue.id);
+    queue = await fetchMergeQueueState(prNumber);
+  }
+  if (queue.autoMergeRequest) await mutatePr('disablePullRequestAutoMerge', prNumber, queue.id);
 }

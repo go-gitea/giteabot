@@ -43,7 +43,9 @@ the pull request from the merge queue.
 
 If the base branch has a GitHub merge queue enabled, the script enables
 auto-merge instead, so GitHub adds the pull request to the queue once its
-required checks pass, and does not update the head branch.
+required checks pass, and does not update the head branch. A pull request that
+loses its approval or the label is taken out of the queue, and one the queue
+removed is only queued again after a new commit or a re-added label.
 
 ### Milestone maintenance
 

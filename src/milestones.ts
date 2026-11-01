@@ -3,6 +3,7 @@ import {
   createMilestone,
   deleteMilestone,
   fetchMilestoneIssues,
+  fetchOpenPrs,
   fetchPr,
   fetchPrsAfterTag,
   fetchUnmergedClosedWithMilestone,
@@ -52,10 +53,12 @@ async function releaseMilestone(milestones: VersionMilestone[], milestone: Versi
   milestones.splice(milestones.indexOf(milestone), 1);
   await addMilestone(milestones, lineTitle(milestone.version));
   const unreleased = await fetchPrsAfterTag(`v${release}`, `release/v${releaseVersion(milestone.version)}`);
+  const prs = await fetchOpenPrs(); // not fetchMilestoneIssues, its milestone filter returns stale results for seconds after a rename
+  for (const number of unreleased) prs.push(await fetchPr(number));
   let allMoved = true;
-  for (const {number, state, pull_request} of await fetchMilestoneIssues(milestone.number)) { // serial, concurrent writes hit secondary rate limits
-    if (!pull_request || (state === 'closed' && !unreleased.has(number))) continue;
-    const target = milestoneForBranch(milestones, (await fetchPr(number)).base.ref);
+  for (const {number, base, milestone: current} of prs) { // serial, concurrent writes hit secondary rate limits
+    if (current?.number !== milestone.number) continue;
+    const target = milestoneForBranch(milestones, base.ref);
     if (target && !await setMilestone(number, target.number)) allMoved = false;
   }
   if (allMoved && await updateMilestone(milestone.number, {state: 'closed'})) {

@@ -25,21 +25,14 @@ person merging can write to the fork.
 
 ### Label maintenance
 
-The script will also look for merged pull requests that have the labels
-`reviewed/wait-merge` or `reviewed/prioritize-merge` and remove them.
+The script will also look for merged pull requests that have the label
+`pr/last-call` and remove it.
 
 It will also search for pull requests that target release branches and remove
 any `backport/*` labels from them.
 
 It will also make sure any pull requests that have `## :warning: BREAKING` in
 their description have the `pr/breaking` label.
-
-### Merge queue synchronization
-
-The script will also look for pull requests that have the label
-`reviewed/wait-merge` and are still open. It will merge the upstream changes
-into the pull request head branch. If a merge conflict occurs, it will remove
-the pull request from the merge queue.
 
 ### Milestone maintenance
 
@@ -59,7 +52,12 @@ appropriate label (one of `lgtm/need 2`, `lgtm/need 1`, `lgtm/done`, or
 `lgtm/blocked`) based on the number of approvals (or change requests) the pull
 request has. It will also set the commit status to `success` if the pull request
 has 2 or more approvals without changes requested (`pending` if not or `failure`
-if changes are requested).
+if changes are requested). Only reviews from users with at least triage access
+count.
+
+GitHub's merge queue only checks the status when a pull request enters it, so
+a pull request that loses its approval is taken out of the queue and its
+auto-merge is disabled.
 
 ### Comments
 
@@ -167,7 +165,6 @@ accepts `all`, `none`, or a comma-separated list from:
 - `backport`
 - `backport_branches`
 - `labels`
-- `merge_queue`
 - `lock`
 - `feedback`
 - `last_call`

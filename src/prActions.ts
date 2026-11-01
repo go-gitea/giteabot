@@ -14,7 +14,7 @@ export async function executePrAction(label: string, pr: {number: number}) {
   }
 }
 
-export async function updateBranch(prNumber: number): Promise<Error | undefined> {
+async function updateBranch(prNumber: number): Promise<Error | undefined> {
   const pr = await fetchPr(prNumber);
   if (await needsUpdate(pr)) {
     const response = await updatePr(pr);

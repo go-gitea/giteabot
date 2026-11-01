@@ -9,7 +9,7 @@ export function isRelevantLabel(label: string): boolean {
 }
 
 export async function maintainLabels() {
-  const labelsToRemoveAfterMerge = ['reviewed/wait-merge', 'reviewed/prioritize-merge', 'pr/last-call'];
+  const labelsToRemoveAfterMerge = ['pr/last-call'];
   await Promise.all([
     removeLabelsFromMergedPr(labelsToRemoveAfterMerge),
     removeBackportLabelsFromPrsTargetingReleaseBranches(),

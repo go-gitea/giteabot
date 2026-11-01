@@ -1,22 +1,13 @@
-import {fetchPendingMerge, removeLabel} from './github.ts';
-import {updateBranch} from './prActions.ts';
+import {fetchMergeQueueState, mutatePr} from './github.ts';
 
-export async function updateMergeQueue() {
-  // update all PRs pending merge (only if they need an update)
-  for (const pr of await fetchPendingMerge()) {
-    try {
-      await updateQueuedPr(pr.number);
-    } catch (error) {
-      console.error(`Failed to update PR #${pr.number}:`, error);
-    }
+// keeps a PR that lost its approval from merging through the queue
+export async function leaveMergeQueue(prNumber: number) {
+  let queue = await fetchMergeQueueState(prNumber);
+  if (!queue.isMergeQueueEnabled) return;
+
+  if (queue.isInMergeQueue) {
+    await mutatePr('dequeuePullRequest', prNumber, queue.id);
+    queue = await fetchMergeQueueState(prNumber);
   }
-}
-
-export async function updateQueuedPr(prNumber: number) {
-  const err = await updateBranch(prNumber);
-
-  if (err?.message === 'merge conflicts in PR') {
-    // if there is a merge conflict, we'll remove the reviewed/wait-merge label
-    await removeLabel(prNumber, 'reviewed/wait-merge');
-  }
+  if (queue.autoMergeRequest) await mutatePr('disablePullRequestAutoMerge', prNumber, queue.id);
 }

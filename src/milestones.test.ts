@@ -1,6 +1,6 @@
 import {assignMilestone, rolloverReleasedMilestones} from './milestones.ts';
 
-test('rolloverReleasedMilestones() migrates predicted versions to line milestones, releases them as untracked tags and serially moves open PRs and PRs merged after the tag', async () => {
+test('rolloverReleasedMilestones() migrates predicted versions to line milestones, releases them as untracked tags and serially moves open PRs and PRs merged after the tag without the lagging milestone issue filter', async () => {
   const requests: string[] = [];
   const milestones = [
     {title: '1.26.5', number: 1, state: 'open'},
@@ -12,12 +12,13 @@ test('rolloverReleasedMilestones() migrates predicted versions to line milestone
     {title: '29.x', number: 14, state: 'closed'},
   ];
   const tags = ['v1.26.4', 'v1.27.4', 'v1.27.5', 'v29.0.0'];
-  const issuesByMilestone: Record<string, {number: number; state?: string; pull_request?: object}[]> = {
-    2: [{number: 30}, {number: 31, pull_request: {}}],
-    3: [{number: 10, state: 'open', pull_request: {}}, {number: 11, state: 'closed', pull_request: {}}, {number: 12, state: 'closed', pull_request: {}}],
-    4: [{number: 20, state: 'open', pull_request: {}}, {number: 21, state: 'open', pull_request: {}}, {number: 22, state: 'open'}],
-  };
-  const baseByPr: Record<string, string> = {10: 'release/v1.27', 11: 'release/v1.27', 20: 'main', 21: 'release/v29'};
+  const issuesByMilestone: Record<string, {number: number}[]> = {2: [{number: 30}, {number: 31}]};
+  const openPrs = [
+    {number: 10, milestone: {number: 3}, base: {ref: 'release/v1.27'}},
+    {number: 20, milestone: {number: 4}, base: {ref: 'main'}},
+    {number: 21, milestone: {number: 4}, base: {ref: 'release/v29'}},
+    {number: 24, milestone: null, base: {ref: 'release/v1.27'}},
+  ];
   let nextNumber = 7;
   let inFlight = 0;
   let maxInFlight = 0;
@@ -38,7 +39,8 @@ test('rolloverReleasedMilestones() migrates predicted versions to line milestone
     if (path === '/commits/abc/pulls') return Response.json([{number: 11}]);
     if (path === '/issues') return Response.json(issuesByMilestone[searchParams.get('milestone')!] ?? []);
     if (path === '/search/issues') return Response.json({items: searchParams.get('q')!.includes('milestone:1.27.x') ? [{number: 23}] : []});
-    if (path.startsWith('/pulls/')) return Response.json({base: {ref: baseByPr[path.split('/').at(-1)!]}});
+    if (path === '/pulls') return Response.json(openPrs);
+    if (path === '/pulls/11') return Response.json({number: 11, milestone: {number: 3}, base: {ref: 'release/v1.27'}});
     return Response.json(milestones.filter(({state}) => searchParams.get('state') === 'all' || state === 'open'));
   });
   const open = await rolloverReleasedMilestones();

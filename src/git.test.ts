@@ -5,9 +5,9 @@ import type {AddressInfo} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCommand} from './cmd.ts';
-import {initializeGitRepo, isBackportReady} from './git.ts';
+import {initializeGitRepo, isBackportConflictFree} from './git.ts';
 
-test('isBackportReady() accepts only clean, non-empty cherry-picks onto the release branch', async () => {
+test('isBackportConflictFree() accepts only clean, non-empty cherry-picks onto the release branch', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'giteabot-test-'));
   onTestFinished(() => rm(dir, {recursive: true}));
   vi.stubEnv('GIT_CONFIG_GLOBAL', '/dev/null');
@@ -28,9 +28,9 @@ test('isBackportReady() accepts only clean, non-empty cherry-picks onto the rele
   await git('switch', '-q', 'release/v1');
   await commit('a', '1\n2\nx\n');
   const repo = {dir, release: 'release/v1', releaseTree: (await git('rev-parse', 'release/v1^{tree}')).stdout.trim()};
-  expect(await isBackportReady(repo, 'clean')).toBe(true);
-  expect(await isBackportReady(repo, 'conflict')).toBe(false);
-  expect(await isBackportReady(repo, 'applied')).toBe(false);
+  expect(await isBackportConflictFree(repo, 'clean')).toBe(true);
+  expect(await isBackportConflictFree(repo, 'conflict')).toBe(false);
+  expect(await isBackportConflictFree(repo, 'applied')).toBe(false);
 });
 
 test('initializeGitRepo() authenticates through a credential helper instead of the clone URL', async () => {

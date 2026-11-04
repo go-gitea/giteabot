@@ -1,4 +1,4 @@
-import {cherryPickPr, cloneTargetRepo, getPrBranchName, initializeGitRepo, isBackportReady, isPrBranchName} from './git.ts';
+import {cherryPickPr, cloneTargetRepo, getPrBranchName, initializeGitRepo, isBackportConflictFree, isPrBranchName} from './git.ts';
 import {fetchGiteaVersions, type GiteaVersion} from './giteaVersion.ts';
 import {
   addComment,
@@ -15,20 +15,20 @@ import {
 } from './github.ts';
 import type {Issue} from './types.ts';
 
-const backportReadyLabel = 'backport/ready';
+const backportConflictFreeLabel = 'backport/conflict-free';
 
 // without PRs, checks all open ones targeting main
-export async function setBackportReadyLabels(prs?: {number: number; labels: {name: string}[]}[]) {
+export async function setBackportConflictFreeLabels(prs?: {number: number; labels: {name: string}[]}[]) {
   prs ??= await fetchTargeting('main');
   const repo = await cloneTargetRepo(prs.map((pr) => pr.number));
   for (const pr of prs) {
     try {
-      const ready = await isBackportReady(repo, `refs/pull/${pr.number}/head`);
-      const labeled = pr.labels.some((label) => label.name === backportReadyLabel);
-      if (ready && !labeled) await addLabels(pr.number, [backportReadyLabel]);
-      if (!ready && labeled) await removeLabel(pr.number, backportReadyLabel);
+      const conflictFree = await isBackportConflictFree(repo, `refs/pull/${pr.number}/head`);
+      const labeled = pr.labels.some((label) => label.name === backportConflictFreeLabel);
+      if (conflictFree && !labeled) await addLabels(pr.number, [backportConflictFreeLabel]);
+      if (!conflictFree && labeled) await removeLabel(pr.number, backportConflictFreeLabel);
     } catch (error) {
-      console.error(`backport_ready check failed for #${pr.number}:`, error);
+      console.error(`backport_conflict_free check failed for #${pr.number}:`, error);
     }
   }
 }

@@ -64,7 +64,7 @@ export async function cloneTargetRepo(prNumbers: number[]) {
 }
 
 // whether the squashed changes of head apply onto release as a non-empty cherry-pick
-export async function isBackportReady({dir, release, releaseTree}: Awaited<ReturnType<typeof cloneTargetRepo>>, head: string) {
+export async function isBackportConflictFree({dir, release, releaseTree}: Awaited<ReturnType<typeof cloneTargetRepo>>, head: string) {
   const base = await git(['merge-base', 'main', head], dir);
   const {code, stdout, stderr} = await runCommand('git', {cwd: dir, args: ['merge-tree', '--write-tree', `--merge-base=${base}`, release, head]});
   if (code === 1) return false;

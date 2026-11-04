@@ -6,6 +6,7 @@ export const TARGET_REPO_GIT = `${TARGET_REPO_HTTP}.git`;
 export const AVAILABLE_CHECKS = [
   'backport',
   'backport_branches',
+  'backport_ready',
   'labels',
   'lock',
   'feedback',

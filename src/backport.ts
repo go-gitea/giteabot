@@ -1,4 +1,4 @@
-import {cherryPickPr, getPrBranchName, initializeGitRepo, isPrBranchName} from './git.ts';
+import {cherryPickPr, cloneTargetRepo, getPrBranchName, initializeGitRepo, isBackportReady, isPrBranchName} from './git.ts';
 import {fetchGiteaVersions, type GiteaVersion} from './giteaVersion.ts';
 import {
   addComment,
@@ -10,8 +10,28 @@ import {
   fetchCandidates,
   fetchCurrentUser,
   fetchPr,
+  fetchTargeting,
+  removeLabel,
 } from './github.ts';
 import type {Issue} from './types.ts';
+
+const backportReadyLabel = 'backport/ready';
+
+// without PRs, checks all open ones targeting main
+export async function setBackportReadyLabels(prs?: {number: number; labels: {name: string}[]}[]) {
+  prs ??= await fetchTargeting('main');
+  const repo = await cloneTargetRepo(prs.map((pr) => pr.number));
+  for (const pr of prs) {
+    try {
+      const ready = await isBackportReady(repo, `refs/pull/${pr.number}/head`);
+      const labeled = pr.labels.some((label) => label.name === backportReadyLabel);
+      if (ready && !labeled) await addLabels(pr.number, [backportReadyLabel]);
+      if (!ready && labeled) await removeLabel(pr.number, backportReadyLabel);
+    } catch (error) {
+      console.error(`backport_ready check failed for #${pr.number}:`, error);
+    }
+  }
+}
 
 // GitHub only auto-deletes a fork branch when the merger can write to the fork
 export async function deleteBackportBranch(pr: {head: {ref: string; repo: {full_name: string; owner: {login: string}} | null}}) {

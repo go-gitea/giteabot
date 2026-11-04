@@ -23,6 +23,14 @@ Once a backport pull request is merged, the `backport_branches` check deletes
 its branch from the bot's fork. GitHub only does this automatically when the
 person merging can write to the fork.
 
+### Backport readiness
+
+The `backport_ready` check labels open pull requests targeting `main` with
+`backport/ready` when their changes would cleanly cherry-pick onto the latest
+release branch, to help decide whether to backport. It checks a pull request
+when it is opened or updated, and all of them on pushes to release branches and
+on scheduled runs.
+
 ### Label maintenance
 
 The script will also look for merged pull requests that have the label
@@ -106,6 +114,7 @@ remind the TOC to review the PR.
      push:
        branches:
          - main
+         - release/v*
      pull_request_target:
        types: [
          opened,
@@ -164,6 +173,7 @@ accepts `all`, `none`, or a comma-separated list from:
 
 - `backport`
 - `backport_branches`
+- `backport_ready`
 - `labels`
 - `lock`
 - `feedback`

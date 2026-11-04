@@ -527,8 +527,8 @@ export async function createBackportPr(originalPr: PullRequest, giteaVersion: Gi
     {method: 'POST', body: JSON.stringify({reviewers: [...approvers]})},
   );
 
-  // if the original PR had exactly one backport/* label, add the backport/done label to it
-  if (originalPr.labels.filter((label) => label.name.startsWith('backport/')).length === 1) {
+  // if the original PR had exactly one backport/v* label, add the backport/done label to it
+  if (originalPr.labels.filter((label) => label.name.startsWith('backport/v')).length === 1) {
     await addLabels(originalPr.number, ['backport/done']);
     console.info(`Added backport/done label to PR #${originalPr.number}`);
   }

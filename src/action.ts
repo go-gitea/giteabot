@@ -1,5 +1,5 @@
 import {readFile} from 'node:fs/promises';
-import {createBackports, deleteBackportBranch} from './backport.ts';
+import {createBackports, deleteBackportBranch, setBackportReadyLabels} from './backport.ts';
 import {isRelevantLabel, maintainLabels} from './labels.ts';
 import {assignMilestone, removeMilestonesFromUnmergedClosedPrs, rolloverReleasedMilestones} from './milestones.ts';
 import {setPrStatusAndLabel, setPrStatusAndLabelBySha, sweepLgtmPrs} from './lgtm.ts';
@@ -96,12 +96,18 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
       await runCheck('backport_branches', () => deleteBackportBranch(pr));
     }
   }
+
+  if ((action === 'opened' || action === 'synchronize') && pr.base.ref === 'main') {
+    await runCheck('backport_ready', () => setBackportReadyLabels([pr]));
+  }
 }
 
 switch (eventName) {
   case 'push': {
     if (payload.ref === 'refs/heads/main') {
       await runCheck('backport', createBackports);
+    } else if (payload.ref.startsWith('refs/heads/release/')) {
+      await runCheck('backport_ready', () => setBackportReadyLabels());
     }
     await runMaintenance();
     break;
@@ -132,6 +138,7 @@ switch (eventName) {
   case 'schedule':
   case 'workflow_dispatch': {
     await runMaintenance();
+    await runCheck('backport_ready', () => setBackportReadyLabels());
     break;
   }
   default:

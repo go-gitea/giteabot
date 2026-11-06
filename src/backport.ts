@@ -20,10 +20,11 @@ const backportConflictFreeLabel = 'backport/conflict-free';
 // without PRs, checks all open ones targeting main
 export async function setBackportConflictFreeLabels(prs?: {number: number; labels: {name: string}[]}[]) {
   prs ??= await fetchTargeting('main');
-  const repo = await cloneTargetRepo(prs.map((pr) => pr.number));
+  const candidates = prs.filter((pr) => pr.labels.some((label) => label.name.startsWith('backport/v')));
+  const repo = candidates.length ? await cloneTargetRepo(candidates.map((pr) => pr.number)) : undefined;
   for (const pr of prs) {
     try {
-      const conflictFree = await isBackportConflictFree(repo, `refs/pull/${pr.number}/head`);
+      const conflictFree = candidates.includes(pr) && (await isBackportConflictFree(repo!, `refs/pull/${pr.number}/head`));
       const labeled = pr.labels.some((label) => label.name === backportConflictFreeLabel);
       if (conflictFree && !labeled) await addLabels(pr.number, [backportConflictFreeLabel]);
       if (!conflictFree && labeled) await removeLabel(pr.number, backportConflictFreeLabel);

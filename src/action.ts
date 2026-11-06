@@ -67,6 +67,9 @@ async function handlePullRequest(action: string, pr: typeof payload.pull_request
       await runCheck('labels', maintainLabels);
       await runCheck('pr_actions', () => executePrAction(labelName, pr));
     }
+    if (labelName?.startsWith('backport/v') && pr.base.ref === 'main') {
+      await runCheck('backport_conflict_free', () => setBackportConflictFreeLabels([pr]));
+    }
     return;
   }
 

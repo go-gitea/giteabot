@@ -3,9 +3,9 @@ import {fetchGiteaVersions} from './giteaVersion.ts';
 
 // a relevant label is one that is used to control the merge queue,
 // manage backports or any other label that causes the bot to act on
-// detection, such as reviewed/* or backport/*
+// detection, such as reviewed/* or backport/v*
 export function isRelevantLabel(label: string): boolean {
-  return label.startsWith('reviewed/') || label.startsWith('backport/') || label.startsWith('giteabot/');
+  return label.startsWith('reviewed/') || label.startsWith('backport/v') || label.startsWith('giteabot/');
 }
 
 export async function maintainLabels() {

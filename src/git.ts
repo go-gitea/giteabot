@@ -11,9 +11,10 @@ export const isPrBranchName = (branch: string) => /^backport-\d+-v[\d.]+$/.test(
 
 let repoDir = '';
 
-async function git(args: string[]) {
-  const result = await runCommand('git', {args, cwd: repoDir});
-  if (!result.success) throw new Error(`git ${args[0]} failed:\n${result.stderr}`);
+async function git(args: string[], cwd = repoDir) {
+  const {code, stdout, stderr} = await runCommand('git', {args, cwd});
+  if (code !== 0) throw new Error(`git ${args[0]} failed:\n${stderr}`);
+  return stdout.trim();
 }
 
 export async function initializeGitRepo(user: string, email: string | null) {
@@ -41,8 +42,8 @@ export async function cherryPickPr(commitHash: string, prNumber: number, giteaMa
   await git(['checkout', `upstream/release/v${giteaMajorMinorVersion}`, '-b', branch]);
 
   // cherry-pick the PR
-  const {success, stdout, stderr} = await runCommand('git', {cwd: repoDir, args: ['cherry-pick', commitHash]});
-  if (!success) {
+  const {code, stdout, stderr} = await runCommand('git', {cwd: repoDir, args: ['cherry-pick', commitHash]});
+  if (code !== 0) {
     console.error(`Cherry-pick failed:\n${stdout}\n${stderr}`.trim());
     await runCommand('git', {cwd: repoDir, args: ['cherry-pick', '--abort']});
     return false;
@@ -51,4 +52,22 @@ export async function cherryPickPr(commitHash: string, prNumber: number, giteaMa
   // push the branch to the fork
   await git(['push', 'origin', branch]);
   return true;
+}
+
+// clones the target repo with the given PR heads and returns its latest release branch
+export async function cloneTargetRepo(prNumbers: number[]) {
+  const dir = await mkdtemp(join(tmpdir(), 'giteabot-'));
+  await git(['clone', '--bare', '--filter=blob:none', TARGET_REPO_GIT, '.'], dir);
+  await git(['fetch', 'origin', ...prNumbers.map((number) => `+refs/pull/${number}/head:refs/pull/${number}/head`)], dir);
+  const release = await git(['for-each-ref', '--sort=-version:refname', '--count=1', '--format=%(refname:short)', 'refs/heads/release/'], dir);
+  return {dir, release, releaseTree: await git(['rev-parse', `${release}^{tree}`], dir)};
+}
+
+// whether the squashed changes of head apply onto release as a non-empty cherry-pick
+export async function isBackportConflictFree({dir, release, releaseTree}: Awaited<ReturnType<typeof cloneTargetRepo>>, head: string) {
+  const base = await git(['merge-base', 'main', head], dir);
+  const {code, stdout, stderr} = await runCommand('git', {cwd: dir, args: ['merge-tree', '--write-tree', `--merge-base=${base}`, release, head]});
+  if (code === 1) return false;
+  if (code !== 0) throw new Error(`git merge-tree failed:\n${stderr}`);
+  return stdout.trim() !== releaseTree;
 }

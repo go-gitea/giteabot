@@ -26,10 +26,10 @@ person merging can write to the fork.
 ### Conflict-free backports
 
 The `backport_conflict_free` check labels open pull requests targeting `main`
-with `backport/conflict-free` when their changes would cleanly cherry-pick onto
-the latest release branch, to help decide whether to backport. It checks a pull
-request when it is opened or updated, and all of them on pushes to release
-branches and on scheduled runs.
+that have a `backport/v*` label with `backport/conflict-free` when their changes
+would cleanly cherry-pick onto the latest release branch. It checks a pull
+request when it is opened or updated or a `backport/v*` label changes, and all
+of them on pushes to release branches and on scheduled runs.
 
 ### Label maintenance
 
